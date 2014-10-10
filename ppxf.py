@@ -678,6 +678,9 @@ class ppxf(object):
 
         s2 = galaxy.shape
         s3 = noise.shape
+	print('star templates shape', s1)
+	print('galaxy shape', s2)
+	print('noise shape', s3)
 
         if sky is not None:
             s4 = sky.shape
@@ -693,7 +696,7 @@ class ppxf(object):
             noise = linalg.cholesky(noise, lower=1) # Cholesky factor of symmetric, positive-definite covariance matrix
             self.noise = linalg.solve_triangular(noise, np.identity(s3[0]), lower=1) # Invert Cholesky factor
         else:   # NOISE is an error spectrum
-            if not np.equal(s2, s3):
+            if not np.all(np.equal(s2, s3)):
                 raise ValueError('GALAXY and NOISE must have the same size/type')
             if not np.all((noise > 0) & np.isfinite(noise)):
                 raise ValueError('NOISE must be a positive vector')
@@ -722,8 +725,10 @@ class ppxf(object):
         else:
             if np.any(np.diff(goodpixels) <= 0):
                 raise ValueError('goodpixels is not monotonic or contains duplicated values')
-            if goodpixels[0] < 0 or goodpixels[-1] > s2[0]-1:
-                raise ValueError('goodpixels are outside the data range')
+            if goodpixels[0] < 0:
+                raise ValueError('goodpixels are outside the data range (0)')
+	    if goodpixels[-1] > s2[0]-1:
+                raise ValueError('goodpixels are outside the data range (1)')
             self.goodpixels = goodpixels
 
         if bias is None:
