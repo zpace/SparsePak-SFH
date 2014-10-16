@@ -1,0 +1,10 @@
+# object	reduced	loaded-in	date	notes
+NGC2558		1	1		21,22	
+NGC4061		1	1		22	
+NGC6109		1	1		22	
+UGC04329	1	1		21	
+NGC2562		1	1		19,20	pellicle left in for 20, so 19 files only reduced in 19 folder
+NGC2563		1	1		19	
+NGC5846		0	0		20	
+NGC2557		0	0		20	cloudy while observing, don't even know if data is good	
+UGC04344	1	1		22	
