@@ -888,6 +888,7 @@ class ppxf(object):
                 w = [0, -1]
             for gj in self.goodpixels[w]:
                 plt.plot([gj, gj], [mn, self.bestfit[gj]], 'LimeGreen')
+            #plt.show()
 
 #-------------------------------------------------------------------------------
 

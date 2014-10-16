@@ -191,6 +191,7 @@ def ppxf_population_example_sdss():
     plt.xlabel("log$_{10}$ Age (Gyr)")
     plt.ylabel("[M/H]")
     plt.tight_layout()
+    plt.show()
 
 #------------------------------------------------------------------------------
 
