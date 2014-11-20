@@ -63,6 +63,7 @@ def ppxf_kinematics_example_sauron():
     h1 = hdu[0].header
 
     lamRange1 = h1['CRVAL1'] + np.array([0.,h1['CDELT1']*(h1['NAXIS1']-1)])
+    print(h1['CDELT1'])
     FWHM_gal = 4.2 # SAURON has an instrumental resolution FWHM of 4.2A.
 
     # If the galaxy is at a significant redshift (z > 0.03), one would need to apply

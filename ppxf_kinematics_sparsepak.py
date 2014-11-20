@@ -6,7 +6,6 @@
 # Cappellari M., & Emsellem E., 2004, PASP, 116, 138.
 # The example also shows how to include a library of templates
 # and how to mask gas emission lines if present.
-# The example is specialized for a fit to a SDSS spectrum.
 #
 # MODIFICATION HISTORY:
 #   V1.0: Written by Michele Cappellari, Leiden 11 November 2003
@@ -33,11 +32,11 @@
 #       This is useful for spectra with large wavelength range.
 #       MC, Oxford, 25 March 2010
 #   V2.21: Updated for Coyote Graphics. MC, Oxford, 11 October 2011
-#   V2.3: Specialized for SDSS spectrum following requests from users.
-#       Renamed PPXF_KINEMATICS_EXAMPLE_SDSS. MC, Oxford, 12 January 2012
-#   V3.0: Translated from IDL into Python. MC, Oxford, 10 December 2013
-#   V3.01: Uses MILES models library. MC, Oxford 11 December 2013
-#   V3.02: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
+#   V2.22: Renamed PPXF_KINEMATICS_EXAMPLE_SAURON to avoid conflict with the
+#       new PPXF_KINEMATICS_EXAMPLE_SDSS. Removed DETERMINE_GOOPIXELS which was
+#       made a separate routine. MC, Oxford, 12 January 2012
+#   V3.0: Translated from IDL into Python. MC, Oxford, 6 December 2013
+#   V3.01: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
 #
 ##############################################################################
 
@@ -46,40 +45,25 @@ from __future__ import print_function
 import pyfits
 from scipy import ndimage
 import numpy as np
-import glob
 from time import clock
+import glob
 
 from ppxf import ppxf
 import ppxf_util as util
 
-import astropy.table as table
+def ppxf_kinematics_sparsepak():
 
-def ppxf_kinematics():
-
-    # Read SDSS DR8 galaxy spectrum taken from here http://www.sdss3.org/dr8/
-    # The spectrum is *already* log rebinned by the SDSS DR8
-    # pipeline and log_rebin should not be used in this case.
+    # Read a galaxy spectrum and define the wavelength range
     #
-    file = 'NGC6109' + '.msobj.fits'
+    dir = ''
+    file = dir + 'NGC6109.msobj.fits'
+
     hdu = pyfits.open(file)
-    gal_lin = hdu[0].data[0]
+    gal_lin = hdu[0].data[42]
     h1 = hdu[0].header
 
-    l = table.Table.read('../arc_disp.txt', format='ascii')
-
-    # The velocity step was already chosen by the SDSS pipeline
-    # and we convert it below to km/s
-    #
-    c = 299792.458 # speed of light in km/s
-    FWHM_gal = 1.4 # WIYN has an instrumental resolution FWHM of 1.4A.
-    z = .03
     lamRange1 = h1['CRVAL1'] + np.array([0.,h1['CDELT1']*(h1['NAXIS1']-1)])
-    lamRange1 = lamRange1/(1+z) # Compute approximate restframe wavelength range
-    FWHM_gal = FWHM_gal/(1+z)   # Adjust resolution in Angstrom
-
-    galaxy, logLam1, velscale = util.log_rebin(lamRange1, gal_lin)
-    galaxy = galaxy/np.median(galaxy) # Normalize spectrum to avoid numerical issues
-    noise = galaxy*0 + 0.0049           # Assume constant noise per pixel here
+    FWHM_gal = 4.2 # SAURON has an instrumental resolution FWHM of 4.2A.
 
     # If the galaxy is at a significant redshift (z > 0.03), one would need to apply
     # a large velocity shift in PPXF to match the template to the galaxy spectrum.
@@ -87,25 +71,41 @@ def ppxf_kinematics():
     # in the input parameter START = [V,sig]. This can cause PPXF to stop!
     # The solution consists of bringing the galaxy spectrum roughly to the
     # rest-frame wavelength, before calling PPXF. In practice there is no
-    # need to modify the spectrum in any way, given that a red shift
-    # corresponds to a linear shift of the log-rebinned spectrum.
+    # need to modify the spectrum before the usual LOG_REBIN, given that a
+    # red shift corresponds to a linear shift of the log-rebinned spectrum.
     # One just needs to compute the wavelength range in the rest-frame
     # and adjust the instrumental resolution of the galaxy observations.
     # This is done with the following three commented lines:
     #
-    # z = 1.23 # Initial estimate of the galaxy redshift
-    # wave = wave/(1+z) # Compute approximate restframe wavelength
-    # FWHM_gal = FWHM_gal/(1+z)   # Adjust resolution in Angstrom
+    z = 0.03 # Initial estimate of the galaxy redshift
+    lamRange1 = lamRange1/(1+z) # Compute approximate restframe wavelength range
+    FWHM_gal = FWHM_gal/(1+z)   # Adjust resolution in Angstrom
+
+    galaxy, logLam1, velscale = util.log_rebin(lamRange1, gal_lin)
+
+    #print(len(galaxy))
+
+    #logLam1 = logLam1[ (np.exp(logLam1) > 4795.) & (np.exp(logLam1) < 5465.) ]
+    #galaxy = galaxy[ (np.exp(logLam1) > 4795.) & (np.exp(logLam1) < 5465.) ]
+
+    print(len(galaxy))
+    print(len(logLam1))
+
+    #print(logLam1)
+    #print(galaxy)
+    galaxy = galaxy/np.median(galaxy) # Normalize spectrum to avoid numerical issues
+    noise = galaxy*0 + 0.0049           # Assume constant noise per pixel here
 
     # Read the list of filenames from the Single Stellar Population library
-    # by Vazdekis (2010, MNRAS, 404, 1639) http://miles.iac.es/. A subset
-    # of the library is included for this example with permission
+    # by Vazdekis (1999, ApJ, 513, 224). A subset of the library is included
+    # for this example with permission. See http://purl.org/cappellari/idl
+    # for suggestions of more up-to-date stellar libraries.
     #
-    vazdekis = glob.glob('miles_models/Mun1.30Z*.fits')
-    FWHM_tem = 2.51 # Vazdekis+10 spectra have a resolution FWHM of 2.51A.
+    vazdekis = glob.glob('spectra/Rbi1.30z*.fits')
+    FWHM_tem = 1.8 # Vazdekis spectra have a resolution FWHM of 1.8A.
 
     # Extract the wavelength range and logarithmically rebin one spectrum
-    # to the same velocity scale of the SDSS galaxy spectrum, to determine
+    # to the same velocity scale of the SAURON galaxy spectrum, to determine
     # the size needed for the array which will contain the template spectra.
     #
     hdu = pyfits.open(vazdekis[0])
@@ -116,11 +116,11 @@ def ppxf_kinematics():
     templates = np.empty((sspNew.size,len(vazdekis)))
 
     # Convolve the whole Vazdekis library of spectral templates
-    # with the quadratic difference between the SDSS and the
+    # with the quadratic difference between the SAURON and the
     # Vazdekis instrumental resolution. Logarithmically rebin
     # and store each template as a column in the array TEMPLATES.
 
-    # Quadratic sigma difference in pixels Vazdekis --> SDSS
+    # Quadratic sigma difference in pixels Vazdekis --> SAURON
     # The formula below is rigorously valid if the shapes of the
     # instrumental spectral profiles are well approximated by Gaussians.
     #
@@ -143,19 +143,29 @@ def ppxf_kinematics():
     # wavelength to the rest frame before using the line below (see above).
     #
     c = 299792.458
-    dv = (logLam2[0]-np.log(wave[0]))*c # km/s
-    vel = c*z # Initial estimate of the galaxy velocity in km/s
-    goodpixels = util.determine_goodpixels(np.log(wave),lamRange2,vel)
+    dv = (logLam2[0]-logLam1[0])*c # km/s
+
+    vel = 450. # Initial estimate of the galaxy velocity in km/s
+    goodPixels = util.determine_goodpixels(logLam1,lamRange2,vel)
 
     # Here the actual fit starts. The best fit is plotted on the screen.
     # Gas emission lines are excluded from the pPXF fit using the GOODPIXELS keyword.
     #
     start = [vel, 180.] # (km/s), starting guess for [V,sigma]
+
+    import matplotlib.pyplot as plt
+    import numpy
+    import scipy.ndimage
+    plt.plot(galaxy, 'k')
+    tmp = numpy.roll(ndimage.gaussian_filter1d(ssp,2),-20)
+    plt.plot(tmp/numpy.median(tmp)*numpy.median(galaxy), 'r')
+    plt.show()
+
     t = clock()
 
     pp = ppxf(templates, galaxy, noise, velscale, start,
-              goodpixels=goodpixels, plot=True, moments=4,
-              degree=10, vsyst=dv, clean=False)
+              goodpixels=goodPixels, plot=True, moments=4,
+              degree=4, vsyst=dv)
 
     print("Formal errors:")
     print("     dV    dsigma   dh3      dh4")
@@ -168,9 +178,9 @@ def ppxf_kinematics():
     # this procedure, the best-fitting redshift is now given by the following
     # commented line (equation 2 of Cappellari et al. 2009, ApJ, 704, L34):
     #
-    #print, 'Best-fitting redshift z:', (z + 1)*(1 + sol[0]/c) - 1
+    #print('Best-fitting redshift z:', (z + 1)*(1 + sol[0]/c) - 1)
 
 #------------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    ppxf_kinematics()
+    ppxf_kinematics_sparsepak()

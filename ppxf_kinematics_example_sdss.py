@@ -68,6 +68,7 @@ def ppxf_kinematics_example_sdss():
     mask = (t.field('wavelength') > 3540) & (t.field('wavelength') < 7409)
     galaxy = t[mask].field('flux')/np.median(t[mask].field('flux'))  # Normalize spectrum to avoid numerical issues
     wave = t[mask].field('wavelength')
+    print(wave)
     noise = galaxy*0 + 0.0156           # Assume constant noise per pixel here
 
     # The velocity step was already chosen by the SDSS pipeline
