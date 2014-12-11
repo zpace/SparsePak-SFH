@@ -150,16 +150,16 @@ backend      : qt4agg
 
 #text.color          : black
 
-font.family        : serif
-font.serif         : Times, Palatino, New Century Schoolbook, Bookman, Computer Modern Roman
-font.sans-serif    : Helvetica, Avant Garde, Computer Modern Sans serif
-font.cursive       : Zapf Chancery
-font.monospace     : Courier, Computer Modern Typewriter
+#font.family        : serif
+#font.serif         : Times, Palatino, New Century Schoolbook, Bookman, Computer Modern Roman
+#font.sans-serif    : Helvetica, Avant Garde, Computer Modern Sans serif
+#font.cursive       : Zapf Chancery
+#font.monospace     : Courier, Computer Modern Typewriter
 
-text.usetex        : true
+#text.usetex        : true
 
 ### LaTeX customizations. See http://www.scipy.org/Wiki/Cookbook/Matplotlib/UsingTex
-#text.usetex         : False  # use latex for all text handling. The following fonts
+text.usetex         : False  # use latex for all text handling. The following fonts
                               # are supported through the usual rc parameter settings:
                               # new century schoolbook, bookman, times, palatino,
                               # zapf chancery, charter, serif, sans-serif, helvetica,
@@ -168,7 +168,7 @@ text.usetex        : true
                               # If another font is desired which can loaded using the
                               # LaTeX \usepackage command, please inquire at the
                               # matplotlib mailing list
-#text.latex.unicode : False # use "ucs" and "inputenc" LaTeX packages for handling
+text.latex.unicode : False # use "ucs" and "inputenc" LaTeX packages for handling
                             # unicode strings.
 #text.latex.preamble :  # IMPROPER USE OF THIS FEATURE WILL LEAD TO LATEX FAILURES
                             # AND IS THEREFORE UNSUPPORTED. PLEASE DO NOT ASK FOR HELP
@@ -211,19 +211,19 @@ text.usetex        : true
 # These settings are only used if mathtext.fontset is 'custom'.
 # Note that this "custom" mode is unsupported and may go away in the
 # future.
-#mathtext.cal : cursive
-#mathtext.rm  : serif
-#mathtext.tt  : monospace
-#mathtext.it  : serif:italic
-#mathtext.bf  : serif:bold
-#mathtext.sf  : sans
-#mathtext.fontset : cm # Should be 'cm' (Computer Modern), 'stix',
+mathtext.cal : cursive
+mathtext.rm  : serif
+mathtext.tt  : monospace
+mathtext.it  : serif:italic
+mathtext.bf  : serif:bold
+mathtext.sf  : sans
+mathtext.fontset : cm # Should be 'cm' (Computer Modern), 'stix',
                        # 'stixsans' or 'custom'
-#mathtext.fallback_to_cm : True  # When True, use symbols from the Computer Modern
+mathtext.fallback_to_cm : True  # When True, use symbols from the Computer Modern
                                  # fonts when a symbol can not be found in one of
                                  # the custom math fonts.
 
-#mathtext.default : it # The default font to use for math.
+mathtext.default : it # The default font to use for math.
                        # Can be any of the LaTeX font names, including
                        # the special name "regular" for the same font
                        # used in regular text.
@@ -255,7 +255,7 @@ text.usetex        : true
 #axes.unicode_minus  : True    # use unicode for the minus symbol
                                # rather than hyphen.  See
                                # http://en.wikipedia.org/wiki/Plus_and_minus_signs#Character_codes
-#axes.color_cycle    : b, g, r, c, m, y, k  # color cycle for plot lines
+axes.color_cycle    : b, g, r, c, m, y, k  # color cycle for plot lines
                                             # as list of string colorspecs:
                                             # single letter, long name, or
                                             # web-style hex
