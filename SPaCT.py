@@ -17,6 +17,9 @@ Version 0.2 (Dec 2014)
 
 Version 0.2.1 (Dec 2014)
 	- add z_test function
+
+Version 0.2.2 (Jan 2015)
+	- pre-blur SDSS and SparsePak spectra before making correction array, to ensure just the overall shape of the curve is fit
 '''
 
 import numpy as np
@@ -24,9 +27,19 @@ import astroML
 import matplotlib.pyplot as plt
 import pyfits as fits
 from astroML.datasets import fetch_sdss_spectrum
+import scipy as sp
 
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
+
+def polydeg(x, degrees):
+	'''
+	Generate a polynomial with negative degrees
+	'''
+
+	# start off by giving your low and high degrees n and m
+	n = -10
+	m = 10
 
 def interp_corr(im, fiberflat, verbose = False, full = False):
 	'''
@@ -166,8 +179,9 @@ def z_test(im, fiberflat, sdss, z = 0.):
 	fluxcal = 1e17 * h*c/( (sparsepak_wavelength) * dl * t * a )
 	
 	#calculate and plot the theoretical flux-calibrated SparsePak spectrum for the central fiber
+	print 'hi'
 	sparsepak_spectrum = fluxcal * interp_corr(im, fiberflat)[47]
-
+	print 'hi'
 	plt.plot(sparsepak_wavelength, sparsepak_spectrum, linewidth = 0.5, label = 'Interpolation-corrected')
 
 	# plot the SDSS spectrum
@@ -195,6 +209,7 @@ def sdss_cal(im, fiberflat, sdss, z, verbose = False, fiber = 47):
 	 - fiber (47): plot which fiber?
 
 	Returns:
+	 - z: redshift (same as argument)
 	 - ifu_corr: corrected IFU science frame (in np array format)
 	'''
 
@@ -212,40 +227,61 @@ def sdss_cal(im, fiberflat, sdss, z, verbose = False, fiber = 47):
 	a = 9.6e4 #cm^2
 	dl = CDELT1
 
+	# theoretical flux-calibration for the observed counts
 	fluxcal = 1e17 * h*c/( (sparsepak_wavelength) * dl * t * a )
-	sparsepak_spectrum = fluxcal * interp_corr(im, fiberflat)[47]
+	sparsepak_spectrum = fluxcal * interp_corr(im, fiberflat)
+	sparsepak_spectrum_ctr = sparsepak_spectrum[fiber]
 
 	sdss_spectrum = sdss.spectrum/np.max(sdss.spectrum) * np.percentile(sparsepak_spectrum, 98.)
 	sdss_wavelength = sdss.wavelength()
 
 	sdss_spectrum_interp = np.interp(sparsepak_wavelength[sparsepak_wavelength < 6500.], sdss_wavelength, sdss_spectrum)
-	corr_arr = sdss_spectrum_interp/sparsepak_spectrum[sparsepak_wavelength < 6500.]
+	# smooth both the resampled sdss spectrum and the sparsepak spectrum, and divide to get a correction array
+	corr_arr = sp.ndimage.filters.gaussian_filter1d(sdss_spectrum_interp, 15)/sp.ndimage.filters.gaussian_filter1d(sparsepak_spectrum_ctr[sparsepak_wavelength < 6500.], 15)
 	corr_poly = np.polyfit(sparsepak_wavelength[sparsepak_wavelength < 6500.], corr_arr, 40)
 
 	if verbose == True:
-		plt.plot(sparsepak_wavelength[sparsepak_wavelength < 6500.], corr_arr, color = 'r', linewidth = 0.25, label = 'Correction array')
-		plt.plot(sparsepak_wavelength, np.polyval(corr_poly, sparsepak_wavelength), label = 'Correction polynomial')
-		plt.axhline(1., linestyle = '--', color = 'k')
-		plt.tick_params(axis='both', which='major', labelsize=16)
-		plt.xlabel('wavelength [$\AA$]', size = 18)
-		plt.ylabel('correction factor', size = 18)
-		plt.title('SparsePak-SDSS correction', size = 20)
-		plt.legend(loc = 'best')
+		# plot fit and error
+
+		ax1 = plt.subplot2grid((2, 2), (0, 0), colspan = 2) # axis for fit plot
+		ax2 = plt.subplot2grid((2, 2), (1, 0)) # axis for fit error plot
+		ax3 = plt.subplot2grid((2, 2), (1, 1)) # axis for fit error histogram
+
+		ax1.plot(sparsepak_wavelength, np.polyval(corr_poly, sparsepak_wavelength), zorder = 0, label = 'Correction polynomial')
+		ax1.plot(sparsepak_wavelength[sparsepak_wavelength < 6500.], corr_arr, color = 'r', linewidth = 0.25, zorder = 1, label = 'Correction array')
+		ax1.axhline(1., linestyle = '--', color = 'k')
+		ax1.tick_params(axis='both', which='major', labelsize=16)
+		ax1.set_xlabel('wavelength [$\AA$]', size = 18)
+		ax1.set_ylabel('correction factor', size = 18)
+		ax1.set_title('SparsePak-SDSS correction', size = 20)
+		ax1.legend(loc = 'best')
+		
+		ax2.plot(sparsepak_wavelength[sparsepak_wavelength < 6500.], np.abs(np.polyval(corr_poly, sparsepak_wavelength[sparsepak_wavelength < 6500.]) - corr_arr) / corr_arr, linewidth = 0.5)
+		ax2.set_xlabel('wavelength [$\AA$]', size = 14)
+		ax2.set_ylabel('Correction function relative error [$\\frac{F_c - A_c}{A_c}$]', size = 14)
+
+		ax3.hist(np.log10(np.abs(np.polyval(corr_poly, sparsepak_wavelength[sparsepak_wavelength < 6500.]) - corr_arr) / corr_arr), bins = 20)
+		ax3.set_xlabel('$\log\\frac{F_c - A_c}{A_c}$', size = 14)
+		print 'Median log-error:', np.median(np.log10(np.abs(np.polyval(corr_poly, sparsepak_wavelength[sparsepak_wavelength < 6500.]) - corr_arr) / corr_arr))
+
+		plt.tight_layout()
 		plt.show()
 
-	ifu_corr = corr_arr * interp_corr(im, fiberflat)
-
 	if verbose == True:
-		plt.plot(sparsepak_wavelength, ifu_corr[fiber], color = 'r', linewidth = 0.5, label = 'Corrected SparsePak spectrum')
-		plt.plot(sparsepak_wavelength, sparsepak_spectrum[fiber], color = 'grey', linewidth = 0.25, label = 'Original SparsePak spectrum')
-		plt.plot(sparsepak_wavelength, interp_corr(im, fiberflat)[fiber], color = 'b', linewidth = 0.25, label = 'Flat-corrected SparsePak spectrum')
-		plt.axhline(1., linestyle = '--', color = 'k')
+		# plot SDSS spectrum and new corrected spectrum
+		plt.plot(sparsepak_wavelength, np.polyval(corr_poly, sparsepak_wavelength) * fluxcal * interp_corr(im, fiberflat)[fiber], c = 'b', linewidth = 1., label = 'SDSS-flux-calibrated SparsePak spectrum')
+		plt.plot(sdss_wavelength[sdss_wavelength < 6500.], sdss_spectrum[sdss_wavelength < 6500.], linewidth = 0.25, c = 'r', label = 'SDSS spectrum')
 		plt.tick_params(axis='both', which='major', labelsize=16)
 		plt.xlabel('wavelength [$\AA$]', size = 18)
 		plt.ylabel('$F_{\lambda} [10^{-17}erg/s/cm^{-2}/\AA]$', size = 18)
 		plt.title('Corrected spectrum', size = 20)
 		plt.legend(loc = 'best')
+		plt.ylim([0., np.max(sdss_spectrum)*1.1])
 		plt.show()
+
+	ifu_corr = sparsepak_spectrum * np.polyval(corr_poly, sparsepak_wavelength)
+
+	return z, ifu_corr
 
 def write_corr_frame(ifu_corr, im, z, objname):
 	'''
@@ -258,6 +294,22 @@ def write_corr_frame(ifu_corr, im, z, objname):
 	 - objname: string name for object
 	'''
 
+	CRVAL1 = np.min(sparsepak_wavelength)
+	CDELT1 = 1.4
+	NAXIS1 = len(ifu_corr[47])
+
+	hdu_flux_cal = fits.PrimaryHDU(ifu_corr)
+	hdulist = fits.HDUList([hdu_flux_cal])
+
+	hdulist[0].header['NAXIS1'] = NAXIS1
+	hdulist[0].header['CRVAL1'] = CRVAL1
+	hdulist[0].header['CDELT1'] = CDELT1
+	hdulist[0].header['BUNIT'] = 'Data Value'
+	hdulist[0].header['CRPIX1'] = 1
+	del hdulist[0].header['EXTEND']
+
+	hdulist.writeto(objname + '_fluxcal.fits', clobber = True)
+
 im = fits.open('NGC2558.msobj.fits')
 fiberflat = fits.open('NGC2558.fiberflat.fits')
 
@@ -265,5 +317,7 @@ plate = 1615
 mjd = 53166
 fiber = 513
 sdss = fetch_sdss_spectrum(plate, mjd, fiber)
+
+#z_test(im, fiberflat, sdss, .0095)
 
 sdss_cal(im, fiberflat, sdss, .0095, verbose = True)
