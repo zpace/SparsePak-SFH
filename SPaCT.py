@@ -20,6 +20,21 @@ Version 0.2.1 (Dec 2014)
 
 Version 0.2.2 (Jan 2015)
 	- pre-blur SDSS and SparsePak spectra before making correction array, to ensure just the overall shape of the curve is fit
+	- pre-load reduced science and fiberflat frame
+'''
+
+#SYNTAX EXAMPLE
+
+'''
+im, fiberflat = load_ifus_precorrection('NGC2558')
+
+plate = 1615
+mjd = 53166
+fiber = 513
+sdss = fetch_sdss_spectrum(plate, mjd, fiber)
+
+z, ifu_corr = sdss_cal(im, fiberflat, sdss, .0095)
+write_corr_frame(ifu_corr, im, z, 'NGC2558')
 '''
 
 import numpy as np
@@ -29,17 +44,8 @@ import pyfits as fits
 from astroML.datasets import fetch_sdss_spectrum
 import scipy as sp
 
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
-
-def polydeg(x, degrees):
-	'''
-	Generate a polynomial with negative degrees
-	'''
-
-	# start off by giving your low and high degrees n and m
-	n = -10
-	m = 10
+plt.rc('text', usetex = True)
+plt.rc('font', family = 'serif')
 
 def interp_corr(im, fiberflat, verbose = False, full = False):
 	'''
@@ -58,11 +64,6 @@ def interp_corr(im, fiberflat, verbose = False, full = False):
 	[- ifu_div_corr_m: division-correction (unsmoothed) matrix]
 	[- ifu_interp_corr_m: interpolation-correction (smoothed) matrix]
 	'''
-
-	# DEPENDENCIES
-	import numpy as np
-	import matplotlib.pyplot as plt
-	import pyfits as fits
 
 	# im contains the IFU data in layer [0].data
 	ifu = im[0].data
@@ -283,7 +284,7 @@ def sdss_cal(im, fiberflat, sdss, z, verbose = False, fiber = 47):
 
 	return z, ifu_corr
 
-def write_corr_frame(ifu_corr, im, z, objname):
+def write_corr_frame(ifu_corr, im, z, objname, verbose = False):
 	'''
 	write out a new .fits file for a flux-calibrated SparsePak spectrum (corrected relative to SDSS spectrum)
 	
@@ -292,32 +293,38 @@ def write_corr_frame(ifu_corr, im, z, objname):
 	 - im: original science frame (.fits HDU), used for wavelength calibration
 	 - z: correct z found by trial-and-error (must be the same as the one plugged into sdss_cal)
 	 - objname: string name for object
+	 - verbose: display basic diagnostic information about file to be written
+
+	Returns: NONE
 	'''
+
+	NAXIS1 = im[0].header['NAXIS1']
+	CRVAL1 = im[0].header['CRVAL1']
+	CDELT1 = im[0].header['CDELT1']
+	if verbose == True: print 'Un-corrected science frame'; print 'NAXIS1:', NAXIS1; print 'CRVAL1:', CRVAL1; print 'CDELT1:', CDELT1
+
+	sparsepak_wavelength = 1. / (1. + z) * np.linspace(CRVAL1, CRVAL1 + CDELT1 * NAXIS1, NAXIS1, endpoint = True )
 
 	CRVAL1 = np.min(sparsepak_wavelength)
 	CDELT1 = 1.4
 	NAXIS1 = len(ifu_corr[47])
 
 	hdu_flux_cal = fits.PrimaryHDU(ifu_corr)
-	hdulist = fits.HDUList([hdu_flux_cal])
-
-	hdulist[0].header['NAXIS1'] = NAXIS1
-	hdulist[0].header['CRVAL1'] = CRVAL1
-	hdulist[0].header['CDELT1'] = CDELT1
-	hdulist[0].header['BUNIT'] = 'Data Value'
-	hdulist[0].header['CRPIX1'] = 1
-	del hdulist[0].header['EXTEND']
+	header = [('NAXIS1', NAXIS1), ('NAXIS2', 75), ('CRVAL1', CRVAL1), ('CDELT1', CDELT1), ('BUNIT', 'Data Value'), ('CRPIX1', 1)]
+	hdulist = fits.HDUList(hdu_flux_cal, header)
 
 	hdulist.writeto(objname + '_fluxcal.fits', clobber = True)
 
-im = fits.open('NGC2558.msobj.fits')
-fiberflat = fits.open('NGC2558.fiberflat.fits')
+def load_ifus_precorrection(objname):
+	'''
+	Load in the science frame (un-corrected) and the fiberflat
+	
+	Arguments:
+	 - objname: string name for object (i.e., the root filename, onto which .fiberflat.fits and .fits are appended)
+	
+	Returns:
+	 - im: .fits HDU of original, un-corrected (but reduced) science frame
+	 - fiberflat: .fits HDU of fiberflat frame (obtained through reduction pipeline)
+	'''
 
-plate = 1615
-mjd = 53166
-fiber = 513
-sdss = fetch_sdss_spectrum(plate, mjd, fiber)
-
-#z_test(im, fiberflat, sdss, .0095)
-
-sdss_cal(im, fiberflat, sdss, .0095, verbose = True)
+	return fits.open(objname + '.msobj.fits'), fits.open(objname + '.fiberflat.fits')
