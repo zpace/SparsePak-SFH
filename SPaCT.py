@@ -26,15 +26,15 @@ Version 0.2.2 (Jan 2015)
 #SYNTAX EXAMPLE
 
 '''
-im, fiberflat = load_ifus_precorrection('NGC2558')
+im, fiberflat = SPaCT.load_ifus_precorrection('NGC2558')
 
 plate = 1615
 mjd = 53166
 fiber = 513
-sdss = fetch_sdss_spectrum(plate, mjd, fiber)
+sdss = SPaCT.fetch_sdss_spectrum(plate, mjd, fiber)
 
-z, ifu_corr = sdss_cal(im, fiberflat, sdss, .0095)
-write_corr_frame(ifu_corr, im, z, 'NGC2558')
+z, ifu_corr = SPaCT.sdss_cal(im, fiberflat, sdss, .0095, verbose = True)
+SPaCT.write_corr_frame(ifu_corr, im, z, 'NGC2558')
 '''
 
 import numpy as np
@@ -243,7 +243,6 @@ def sdss_cal(im, fiberflat, sdss, z, verbose = False, fiber = 47):
 
 	if verbose == True:
 		# plot fit and error
-
 		ax1 = plt.subplot2grid((2, 2), (0, 0), colspan = 2) # axis for fit plot
 		ax2 = plt.subplot2grid((2, 2), (1, 0)) # axis for fit error plot
 		ax3 = plt.subplot2grid((2, 2), (1, 1)) # axis for fit error histogram
