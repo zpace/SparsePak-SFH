@@ -197,7 +197,7 @@
 #       parameters at the end of the fit.
 #   REDDENING: Set this keyword to an initail estimate of the reddening E(B-V)>=0
 #       to fit a positive reddening together with the kinematics and the templates.
-#       The fit assumes the exctinction curve of Calzetti et al. (2000, ApJ, 533, 682)
+#       The fit assumes the extinction curve of Calzetti et al. (2000, ApJ, 533, 682)
 #       but any other prescriptions could be trivially implemented by modifying the
 #       function REDDENING_CURVE below.
 #     - IMPORTANT: The MDEGREE keyword cannot be used when REDDENING is set.
@@ -478,6 +478,8 @@
 #           calculation for very long or highly-oversampled spectra. Thanks to
 #           Remco van den Bosch for reporting situations where this optimization
 #           may be useful. MC, Las Vegas Airport, 13 September 2014
+#   V5.1.10: Fixed bug in saving output introduced in previous version.
+#           MC, Oxford, 14 October 2014
 #
 ################################################################################
 
@@ -487,7 +489,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numpy.polynomial import legendre
 from scipy import ndimage, optimize, linalg
-
+ 
 import cap_mpfit as mpfit
 
 #-------------------------------------------------------------------------------
@@ -502,7 +504,7 @@ def nnls_flags(A, b, flags):
     """
     m, n = A.shape
     mask = flags == 0
-    AA = np.hstack([A, -A[:,mask]])
+    AA = np.hstack([A, -A[:, mask]])
     x, err = optimize.nnls(AA, b)
     x[mask] -= x[n:]
 
@@ -611,9 +613,9 @@ def _rfft_templates(templates, vsyst, vlims, sigmax, factor, nspec):
 class ppxf(object):
 
     def __init__(self, templates, galaxy, noise, velScale, start,
-         bias=None, clean=False, degree=4, goodpixels=None, mdegree=0,
-         moments=2, oversample=False, plot=False, quiet=False, sky=None,
-         vsyst=0, regul=0, lam=None, reddening=None, component=0, reg_dim=None):
+            bias=None, clean=False, degree=4, goodpixels=None, mdegree=0,
+            moments=2, oversample=False, plot=False, quiet=False, sky=None,
+            vsyst=0, regul=0, lam=None, reddening=None, component=0, reg_dim=None):
 
         # Do extensive checking of possible input errors
         #
@@ -666,7 +668,7 @@ class ppxf(object):
 
         moments = np.atleast_1d(moments)
         if moments.size == 1: # moments is scalar: all LOSVDs have same number of G-H moments
-            self.moments = np.zeros(self.ncomp, dtype=int) + np.abs(moments)
+            self.moments = np.full(self.ncomp, np.abs(moments), dtype=int)
         else:
             self.moments = np.abs(moments)
 
@@ -678,16 +680,13 @@ class ppxf(object):
 
         s2 = galaxy.shape
         s3 = noise.shape
-	print('star templates shape', s1)
-	print('galaxy shape', s2)
-	print('noise shape', s3)
 
         if sky is not None:
             s4 = sky.shape
             if s4[0] != s2[0]:
                 raise ValueError('SKY must have the same size as GALAXY')
 
-        if (len(s1) > 2 or len(s2) > 2 or len(s3) > 2):
+        if len(s1) > 2 or len(s2) > 2 or len(s3) > 2:
             raise ValueError('Wrong input dimensions')
 
         if len(s3) > 1 and s3[0] == s3[1]: # NOISE is a 2-dim covariance matrix
@@ -696,7 +695,7 @@ class ppxf(object):
             noise = linalg.cholesky(noise, lower=1) # Cholesky factor of symmetric, positive-definite covariance matrix
             self.noise = linalg.solve_triangular(noise, np.identity(s3[0]), lower=1) # Invert Cholesky factor
         else:   # NOISE is an error spectrum
-            if not np.all(np.equal(s2, s3)):
+            if not np.equal(s2, s3):
                 raise ValueError('GALAXY and NOISE must have the same size/type')
             if not np.all((noise > 0) & np.isfinite(noise)):
                 raise ValueError('NOISE must be a positive vector')
@@ -725,10 +724,8 @@ class ppxf(object):
         else:
             if np.any(np.diff(goodpixels) <= 0):
                 raise ValueError('goodpixels is not monotonic or contains duplicated values')
-            if goodpixels[0] < 0:
-                raise ValueError('goodpixels are outside the data range (0)')
-	    if goodpixels[-1] > s2[0]-1:
-                raise ValueError('goodpixels are outside the data range (1)')
+            if goodpixels[0] < 0 or goodpixels[-1] > s2[0]-1:
+                raise ValueError('goodpixels are outside the data range')
             self.goodpixels = goodpixels
 
         if bias is None:
@@ -830,7 +827,8 @@ class ppxf(object):
         self.chi2 = robust_sigma(err, zero=True)**2   # Robust computation of Chi**2/DOF.
 
         p = 0
-        self.sol = self.error = []
+        self.sol = []
+        self.error = []
         for j in range(self.ncomp):
             mp.params[p:p+2] *= velScale # Bring velocity scale back to km/s
             self.sol.append(mp.params[p:self.moments[j]+p])
@@ -888,7 +886,6 @@ class ppxf(object):
                 w = [0, -1]
             for gj in self.goodpixels[w]:
                 plt.plot([gj, gj], [mn, self.bestfit[gj]], 'LimeGreen')
-            #plt.show()
 
 #-------------------------------------------------------------------------------
 
@@ -1036,11 +1033,7 @@ class ppxf(object):
         # Press W.H., et al., 2007, Numerical Recipes, 3rd ed. equation (19.5.10)
         #
         if self.regul > 0:
-            if dim == 1:
-                i = np.arange(self.reg_dim)
-            else:
-                i = np.arange(np.prod(self.reg_dim)).reshape(self.reg_dim)
-            i += npoly
+            i = npoly + np.arange(np.prod(self.reg_dim)).reshape(self.reg_dim)
             p = npix*nspec
             diff = np.array([-1, 2, -1])*self.regul
             ind = np.array([-1, 0, 1])
@@ -1103,14 +1096,15 @@ class ppxf(object):
 
         # Penalize the solution towards (h3, h4, ...) = 0 if the inclusion of
         # these additional terms does not significantly decrease the error.
+        # The lines implement eq.(8)-(9) in Cappellari & Emsellem (2004)
         #
         if np.any(self.moments > 2) and self.bias != 0:
-            tmp = 0.
+            D2 = 0.
             for j, p in enumerate(vj): # loop over kinematic components
-                if self.moments[j] > 2:
-                    tmp += np.sum(pars[2+p:self.moments[j]+p]**2)
-            err += self.bias*robust_sigma(err, zero=True)*np.sqrt(tmp)
+                if self.moments[j] > 2:  # eq.(8)
+                    D2 += np.sum(pars[2+p:self.moments[j]+p]**2)
+            err += self.bias*robust_sigma(err, zero=True)*np.sqrt(D2)  # eq.(9)
 
-        return (0, err)
+        return 0, err
 
 #-------------------------------------------------------------------------------

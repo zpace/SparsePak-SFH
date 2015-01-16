@@ -132,7 +132,7 @@ def log_rebin(lamRange, spec, oversample=False, velscale=None, flux=False):
         logLim[1] = logLim[0] + m*logScale
 
     newBorders = np.exp(np.linspace(*logLim, num=m+1)) # Logarithmically
-    k = (newBorders - lim[0]).clip(0, n-1).astype(np.int)
+    k = (newBorders - lim[0]).clip(0, n-1).astype(int)
 
     specNew = np.add.reduceat(spec, k)[:-1]  # Do analytic integral
     specNew *= np.diff(k) > 0    # fix for design flaw of reduceat()
@@ -177,7 +177,7 @@ def determine_goodpixels(logLam, lamRangeTemp, vel):
     dv = lines*0 + 800 # width/2 of masked gas emission region in km/s
     c = 299792.458 # speed of light in km/s
 
-    flag = logLam < 0 # empy mask
+    flag = logLam < 0 # empty mask
     for j in range(lines.size):
         flag |= (logLam > np.log(lines[j]) + (vel - dv[j])/c) \
               & (logLam < np.log(lines[j]) + (vel + dv[j])/c)
@@ -193,7 +193,7 @@ def determine_goodpixels(logLam, lamRangeTemp, vel):
 #       Returns line names together with emission lines templates.
 #       MC, Oxford, 3 August 2014
 # V1.1.1: Only returns lines included within the estimated fitted wavelength range.
-#       This avoid identically zero gas templates being included in the PPXF fit
+#       This avoids identically zero gas templates being included in the PPXF fit
 #       which can cause numearical instabilities in the solution of the system.
 #       MC, Oxford, 3 September 2014
 

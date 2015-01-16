@@ -9,35 +9,35 @@
 # The example is specialized for a fit to a SDSS spectrum.
 #
 # MODIFICATION HISTORY:
-#   V1.0: Written by Michele Cappellari, Leiden 11 November 2003
-#   V1.1: Log rebin the galaxy spectrum. Show how to correct the velocity
+#   V1.0.0: Written by Michele Cappellari, Leiden 11 November 2003
+#   V1.1.0: Log rebin the galaxy spectrum. Show how to correct the velocity
 #       for the difference in starting wavelength of galaxy and templates.
 #       MC, Vicenza, 28 December 2004
-#   V1.11: Included explanation of correction for instrumental resolution.
+#   V1.1.1: Included explanation of correction for instrumental resolution.
 #       After feedback from David Valls-Gabaud. MC, Venezia, 27 June 2005
-#   V2.0: Included example routine to determine the goodPixels vector
+#   V2.0.0: Included example routine to determine the goodPixels vector
 #       by masking known gas emission lines. MC, Oxford, 30 October 2008
-#   V2.01: Included instructions for high-redshift usage. Thanks to Paul Westoby
+#   V2.0.1: Included instructions for high-redshift usage. Thanks to Paul Westoby
 #       for useful feedback on this issue. MC, Oxford, 27 November 2008
-#   V2.02: Included example for obtaining the best-fitting redshift.
+#   V2.0.2: Included example for obtaining the best-fitting redshift.
 #       MC, Oxford, 14 April 2009
-#   V2.1: Bug fix: Force PSF_GAUSSIAN to produce a Gaussian with an odd
+#   V2.1.0: Bug fix: Force PSF_GAUSSIAN to produce a Gaussian with an odd
 #       number of elements centered on the middle one. Many thanks to
 #       Harald Kuntschner, Eric Emsellem, Anne-Marie Weijmans and
 #       Richard McDermid for reporting problems with small offsets
 #       in systemic velocity. MC, Oxford, 15 February 2010
-#   V2.11: Added normalization of galaxy spectrum to avoid numerical
+#   V2.1.1: Added normalization of galaxy spectrum to avoid numerical
 #       instabilities. After feedback from Andrea Cardullo.
 #       MC, Oxford, 17 March 2010
-#   V2.2: Perform templates convolution in linear wavelength.
+#   V2.2.0: Perform templates convolution in linear wavelength.
 #       This is useful for spectra with large wavelength range.
 #       MC, Oxford, 25 March 2010
-#   V2.21: Updated for Coyote Graphics. MC, Oxford, 11 October 2011
-#   V2.3: Specialized for SDSS spectrum following requests from users.
+#   V2.2.1: Updated for Coyote Graphics. MC, Oxford, 11 October 2011
+#   V2.3.0: Specialized for SDSS spectrum following requests from users.
 #       Renamed PPXF_KINEMATICS_EXAMPLE_SDSS. MC, Oxford, 12 January 2012
-#   V3.0: Translated from IDL into Python. MC, Oxford, 10 December 2013
-#   V3.01: Uses MILES models library. MC, Oxford 11 December 2013
-#   V3.02: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
+#   V3.0.0: Translated from IDL into Python. MC, Oxford, 10 December 2013
+#   V3.0.1: Uses MILES models library. MC, Oxford 11 December 2013
+#   V3.0.2: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
 #
 ##############################################################################
 
@@ -68,7 +68,6 @@ def ppxf_kinematics_example_sdss():
     mask = (t.field('wavelength') > 3540) & (t.field('wavelength') < 7409)
     galaxy = t[mask].field('flux')/np.median(t[mask].field('flux'))  # Normalize spectrum to avoid numerical issues
     wave = t[mask].field('wavelength')
-    print(wave)
     noise = galaxy*0 + 0.0156           # Assume constant noise per pixel here
 
     # The velocity step was already chosen by the SDSS pipeline

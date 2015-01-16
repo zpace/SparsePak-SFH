@@ -9,12 +9,12 @@
 # stellar population and kinematics.
 #
 # MODIFICATION HISTORY:
-#   V1.0: Early test version. Michele Cappellari, Oxford, 20 July 2009
-#   V1.1: Cleaned up for the paper by Johnston et al. (MNRAS, 2013).
+#   V1.0.0: Early test version. Michele Cappellari, Oxford, 20 July 2009
+#   V1.1.0: Cleaned up for the paper by Johnston et al. (MNRAS, 2013).
 #       MC, Oxford, 26 January 2012
-#   V2.0: Converted to Python and adapted to the changes in the new public
+#   V2.0.0: Converted to Python and adapted to the changes in the new public
 #       PPXF version, Oxford 8 January 2014
-#   V2.01: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
+#   V2.0.1: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
 #
 ##############################################################################
 
@@ -36,7 +36,7 @@ def ppxf_two_components_example():
     hdu = pyfits.open('spectra/Rbi1.30z+0.00t12.59.fits')
     gal_lin = hdu[0].data
     h1 = hdu[0].header
-    lamRange1 = h1['CRVAL1'] + np.array([0.,h1['CDELT1']*(h1['NAXIS1']-1)])
+    lamRange1 = h1['CRVAL1'] + np.array([0., h1['CDELT1']*(h1['NAXIS1']-1)])
     model1, logLam1, velscale = util.log_rebin(lamRange1, gal_lin, velscale=velscale)
     model1 /= np.median(model1)
 
@@ -51,7 +51,7 @@ def ppxf_two_components_example():
     # These are the input values for the (V,sigma)
     # of the two kinematic components
     #
-    vel = np.array([0.,250.])/velscale
+    vel = np.array([0., 250.])/velscale
     sigma = np.array([200., 100.])/velscale
 
     # The synthetic galaxy model consists of the sum of two
@@ -59,12 +59,12 @@ def ppxf_two_components_example():
     # with different velocity and dispersion
     #
     for j in range(len(vel)):
-        dx = int(abs(vel[j])+4.*sigma[j])   # Sample the Gaussian at least to vel+4*sigma
-        v = np.linspace(-dx,dx,2*dx+1)
+        dx = int(abs(vel[j]) + 4.*sigma[j])   # Sample the Gaussian at least to vel+4*sigma
+        v = np.linspace(-dx, dx, 2*dx + 1)
         losvd = np.exp(-0.5*((v - vel[j])/sigma[j])**2) # Gaussian LOSVD
         losvd /= np.sum(losvd) # normaize LOSVD
-        galaxy[:,j] = signal.fftconvolve(model[:,j],losvd,mode="same")
-        galaxy[:,j] /= np.median(model[:,j])
+        galaxy[:, j] = signal.fftconvolve(model[:, j], losvd, mode="same")
+        galaxy[:, j] /= np.median(model[:, j])
     galaxy = np.sum(galaxy, axis=1)
     sn = 200.
     np.random.seed(2) # Ensure reproducible results
@@ -80,7 +80,7 @@ def ppxf_two_components_example():
     #
     start = [np.mean(vel)*velscale, np.mean(sigma)*velscale]
     start = [start, start]
-    goodPixels = np.arange(20,1280)
+    goodPixels = np.arange(20, 1280)
 
     t = clock()
 
@@ -91,7 +91,7 @@ def ppxf_two_components_example():
 
     pp = ppxf(templates, galaxy, galaxy*0+1, velscale, start,
               goodpixels=goodPixels, plot=True, degree=4,
-              moments=[4,4], component=[0,0,1,1])
+              moments=[4, 4], component=[0, 0, 1, 1])
 
     plt.subplot(212)
     plt.title("Single component pPXF fit")

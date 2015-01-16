@@ -8,7 +8,7 @@ Cappellari M., & Emsellem E., (2004, PASP, 116, 138).
 
 The following files are included in the software distribution:
 
-mge_mpfit.py                ---> Craig Markwardt MPFIT for Python 2/3
+cap_mpfit.py                ---> Craig Markwardt MPFIT adapted for Python 2/3
 ppxf.py                     ---> The main pPXF routine
 ppxf_kinematics_example_sauron.py ---> pPXF kinematics usage example
 ppxf_kinematics_example_sdss.py   ---> pPXF kinematics usage example
@@ -17,6 +17,7 @@ ppxf_population_gas_example_sdss.py ---> Extracting stellar population and gas e
 ppxf_simulation_example.py     ---> Example Monte Carlo simulation
 ppxf_two_components_example.py ---> Extracting two stellar kinematic components
 ppxf_utils.py               ---> Contains log_rebin and determine_good_pixels
+ppxf_python_reference_output.txt ---> The output one should get from the examples
 readme.txt                  ---> This README file
 /spectra                    ---> directory of FITS spectra for example
 /Miles_Models               ---> directory of FITS SSP models
@@ -96,15 +97,15 @@ smoothing window and the pixels shift. If you cannot get a rough match
 by eye it means something is wrong and it is unlikely that PPXF
 (or any other program) will find a good match.
 
-  import pyplot
-  import numpy
+  import numpy as np
+  import matplotlib.pyplot as plt
   import scipy.ndimage
   
-  pyplot.plot(galaxy, k')
-  tmp = numpy.roll(ndimage.gaussian_filter1d(template,2),-20)
-  pyplot.plot(tmp/numpy.median(tmp)*numpy.median(galaxy), 'r')
+  plt.plot(galaxy, 'k')
+  tmp = np.roll(ndimage.gaussian_filter1d(template, 2), -20)
+  plt.plot(tmp/np.median(tmp)*np.median(galaxy), 'r')
 
 ################
 
 Written: Michele Cappellari, Leiden, 6 November 2003
-Last updated: MC, Oxford, 3 September 2014
+Last updated: MC, Oxford, 3 December 2014

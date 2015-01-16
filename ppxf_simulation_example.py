@@ -11,16 +11,16 @@
 # for the Gauss-Hermite parameters are well within the rms scatter of the measured values.
 # See the documentation in the file ppxf.pro for a more accurate description.
 #
-# V1.0: By Michele Cappellari, Leiden, 28 March 2003
-# V1.1: Included in the standard PPXF distribution. After feedback
+# V1.0.0: By Michele Cappellari, Leiden, 28 March 2003
+# V1.1.0: Included in the standard PPXF distribution. After feedback
 #   from Alejandro Garcia Bedregal. MC, Leiden, 13 April 2005
-# V1.11: Adjust GOODPIXELS according to the size of the convolution kernel.
+# V1.1.1: Adjust GOODPIXELS according to the size of the convolution kernel.
 #   MC, Oxford, 13 April 2010
-# V1.12: Use Coyote Graphics (http://www.idlcoyote.com/) by David W. Fanning.
+# V1.1.2: Use Coyote Graphics (http://www.idlcoyote.com/) by David W. Fanning.
 #   The required routines are now included in NASA IDL Astronomy Library.
 #   MC, Oxford, 29 July 2011
-# V2.0: Translated from IDL into Python. MC, Oxford, 9 December 2013
-# V2.01: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
+# V2.0.0: Translated from IDL into Python. MC, Oxford, 9 December 2013
+# V2.0.1: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
 #
 ##############################################################################
 

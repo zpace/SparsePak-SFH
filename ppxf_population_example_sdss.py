@@ -6,14 +6,14 @@
 # Cappellari M., & Emsellem E., 2004, PASP, 116, 138.
 #
 # MODIFICATION HISTORY:
-#   V1.0: Adapted from PPXF_KINEMATICS_EXAMPLE.
+#   V1.0.0: Adapted from PPXF_KINEMATICS_EXAMPLE.
 #       Michele Cappellari, Oxford, 12 October 2011
-#   V1.1: Made a separate routine for the construction of the templates
+#   V1.1.0: Made a separate routine for the construction of the templates
 #       spectral library. MC, Vicenza, 11 October 2012
-#   V1.11: Includes regul_error definition. MC, Oxford, 15 November 2012
-#   V2.0: Translated from IDL into Python. MC, Oxford, 6 December 2013
-#   V2.01: Fit SDSS rather than SAURON spectrum. MC, Oxford, 11 December 2013
-#   V2.02: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
+#   V1.1.1: Includes regul_error definition. MC, Oxford, 15 November 2012
+#   V2.0.0: Translated from IDL into Python. MC, Oxford, 6 December 2013
+#   V2.0.1: Fit SDSS rather than SAURON spectrum. MC, Oxford, 11 December 2013
+#   V2.0.2: Support both Python 2.6/2.7 and Python 3.x. MC, Oxford, 25 May 2014
 #
 ##############################################################################
 
@@ -192,6 +192,11 @@ def ppxf_population_example_sdss():
     plt.ylabel("[M/H]")
     plt.tight_layout()
     plt.show()
+
+    vazdekis = glob.glob('miles_models/Mun1.30*.fits')
+
+    for i in range(len(vazdekis)):
+        print(vazdekis[i].rstrip('.fits').split('/')[-1], weights.flatten()[i])
 
 #------------------------------------------------------------------------------
 
