@@ -136,6 +136,7 @@ def ppxf_kinematics_example_sauron():
 
     vel = 450. # Initial estimate of the galaxy velocity in km/s
     goodPixels = util.determine_goodpixels(logLam1,lamRange2,vel)
+    print('logLam1:', logLam1, '\nlamRange2:', lamRange2, '\nvel:', vel)
     print(goodPixels)
 
     # Here the actual fit starts. The best fit is plotted on the screen.
@@ -151,6 +152,8 @@ def ppxf_kinematics_example_sauron():
     print("Formal errors:")
     print("     dV    dsigma   dh3      dh4")
     print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
+
+    for row in zip(vazdekis, pp.weights): print(row)
 
     print('Elapsed time in PPXF: %.2f s' % (clock() - t))
 

@@ -853,9 +853,9 @@ class ppxf(object):
             if reddening is not None:
                 print('Reddening E(B-V): ', self.reddening)
             print('Nonzero Templates: ', sum(self.weights > 0), ' / ', nw)
-            if self.weights.size <= 20:
-                print('Templates weights:')
-                print("".join("%8.3g" % f for f in self.weights))
+            #if self.weights.size <= 20:
+            #    print('Templates weights:')
+            #    print("".join("%8.3g" % f for f in self.weights))
 
         if self.ncomp ==1:
             self.sol = self.sol[0]
