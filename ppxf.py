@@ -868,14 +868,15 @@ class ppxf(object):
             mx = np.max(self.bestfit[self.goodpixels])
             resid = mn + self.galaxy - self.bestfit
             mn1 = np.min(resid[self.goodpixels])
-            plt.xlabel("Pixels")
-            plt.ylabel("Counts")
+            plt.xlabel("Pixels", fontsize = 16)
+            plt.ylabel("Counts", fontsize = 16)
             plt.xlim(np.array([-0.02, 1.02])*self.galaxy.size)
             plt.ylim([mn1, mx] + np.array([-0.05, 0.05])*(mx-mn1))
-            plt.plot(self.galaxy, 'k')
-            plt.plot(self.bestfit, 'r', linewidth=2)
+            plt.plot(self.galaxy, c = 'k', label = 'galaxy')
+            plt.plot(self.bestfit, c = 'r', linewidth=2, label = 'pPXF fit')
             plt.plot(self.goodpixels, resid[self.goodpixels], 'd', c='LimeGreen', mec='LimeGreen', ms=4)
             plt.plot(self.goodpixels, self.goodpixels*0+mn, ',k')
+            plt.legend(loc = 'best')
             w = np.where(np.diff(self.goodpixels) > 1)[0]
             if w.size > 0:
                 for wj in w:

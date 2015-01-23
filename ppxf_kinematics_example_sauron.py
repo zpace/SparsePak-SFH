@@ -47,6 +47,7 @@ from scipy import ndimage
 import numpy as np
 from time import clock
 import glob
+import matplotlib.pyplot as plt
 
 from ppxf import ppxf
 import ppxf_util as util
@@ -148,6 +149,7 @@ def ppxf_kinematics_example_sauron():
     pp = ppxf(templates, galaxy, noise, velscale, start,
               goodpixels=goodPixels, plot=True, moments=4,
               degree=4, vsyst=dv)
+    plt.show()
 
     print("Formal errors:")
     print("     dV    dsigma   dh3      dh4")

@@ -24,6 +24,7 @@ Version 0.2.2 (Jan 2015)
 
 Version 0.3.0 (Jan 2015)
 	- corrected to include both the survey-found z and a dz
+	- added a blur parameter, along with a blur visualizer
 	- provided SED in erg/s/cm^2/A, eliminating 10^-17 factor to make it more machine-readable
 '''
 
@@ -202,7 +203,7 @@ def z_test(im, fiberflat, sdss, fiber = 47, dz = 0.):
 
 	return sdss.spectrum/np.max(sdss.spectrum) * np.percentile(sparsepak_spectrum, 98.)
 
-def sdss_cal(im, fiberflat, sdss, dz, verbose = False, fiber = 47):
+def sdss_cal(im, fiberflat, sdss, dz, verbose = False, fiber = 47, blur = 100):
 	'''
 	using a known dz, calculate a correction to a SparsePak spectrum based on an SDSS spectrum of the same object. 
 
@@ -213,6 +214,7 @@ def sdss_cal(im, fiberflat, sdss, dz, verbose = False, fiber = 47):
 	 - dz: redshift offset from SDSS (I recommend testing redshifts by hand before generating a correction)
 	 - verbose (False): display plots?
 	 - fiber (47): plot which fiber?
+	 - blur (50): size of gaussian blur
 
 	Returns:
 	 - dz: redshift offset (same as argument)
@@ -243,10 +245,32 @@ def sdss_cal(im, fiberflat, sdss, dz, verbose = False, fiber = 47):
 
 	sdss_spectrum_interp = np.interp(sparsepak_wavelength[sparsepak_wavelength < 6500.], sdss_wavelength, sdss_spectrum)
 	# smooth both the resampled sdss spectrum and the sparsepak spectrum, and divide to get a correction array
-	corr_arr = sp.ndimage.filters.gaussian_filter1d(sdss_spectrum_interp, 15)/sp.ndimage.filters.gaussian_filter1d(sparsepak_spectrum_ctr[sparsepak_wavelength < 6500.], 15)
+	corr_arr = sp.ndimage.filters.gaussian_filter1d(sdss_spectrum_interp, blur)/sp.ndimage.filters.gaussian_filter1d(sparsepak_spectrum_ctr[sparsepak_wavelength < 6500.], blur)
 	corr_poly = np.polyfit(sparsepak_wavelength[sparsepak_wavelength < 6500.], corr_arr, 40)
 
-	if verbose == True:
+	if verbose:
+		# plot the smoothed SDSS spectrum and the smoothed SparsePak spectrum
+		plt.figure(figsize = (8,6))
+		ax1 = plt.subplot(111)
+		ax1.plot(sdss.wavelength(), sdss.spectrum, label = 'SDSS raw', linewidth = 0.25, c = 'b')
+		ax1.plot(sdss.wavelength(), sp.ndimage.filters.gaussian_filter1d(sdss.spectrum, blur), c = 'b', linewidth = 2, label = 'SDSS shape')
+		ax1.set_xlabel('$\lambda [\AA]$', size = 14)
+		ax1.set_ylabel('SDSS $F_{\lambda}$', color = 'b', size = 14)
+		[t.set_color('blue') for t in ax1.yaxis.get_ticklines()]
+		[t.set_color('blue') for t in ax1.yaxis.get_ticklabels()]
+
+		ax2 = plt.twinx(ax1)
+		ax2.plot(sparsepak_wavelength[sparsepak_wavelength < 6500.], sparsepak_spectrum_ctr[sparsepak_wavelength < 6500.], c = 'k', linewidth = 0.25, label = 'SparsePak raw')
+		ax2.plot(sparsepak_wavelength[sparsepak_wavelength < 6500.], sp.ndimage.filters.gaussian_filter1d(sparsepak_spectrum_ctr[sparsepak_wavelength < 6500.], blur), c = 'k', linewidth = 2, label = 'SparsePak shape')
+		ax2.set_ylabel('SparsePak $F_{\lambda}$', size = 14, color = 'k')
+		[t.set_color('k') for t in ax1.yaxis.get_ticklines()]
+		[t.set_color('k') for t in ax1.yaxis.get_ticklabels()]
+
+		ax1.legend(loc = 'upper right')
+		ax2.legend(loc = 'upper left')
+		plt.show()
+
+	if verbose:
 		# plot fit and error
 		ax1 = plt.subplot2grid((2, 2), (0, 0), colspan = 2) # axis for fit plot
 		ax2 = plt.subplot2grid((2, 2), (1, 0)) # axis for fit error plot
@@ -272,7 +296,7 @@ def sdss_cal(im, fiberflat, sdss, dz, verbose = False, fiber = 47):
 		plt.tight_layout()
 		plt.show()
 
-	if verbose == True:
+	if verbose:
 		# plot SDSS spectrum and new corrected spectrum
 		plt.plot(sparsepak_wavelength, np.polyval(corr_poly, sparsepak_wavelength) * fluxcal * interp_corr(im, fiberflat)[fiber], c = 'b', linewidth = 1., label = 'SDSS-flux-calibrated SparsePak spectrum')
 		plt.plot(sdss_wavelength[sdss_wavelength < 6500.], sdss_spectrum[sdss_wavelength < 6500.], linewidth = 0.25, c = 'r', label = 'SDSS spectrum')
