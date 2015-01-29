@@ -53,6 +53,23 @@ import scipy as sp
 plt.rc('text', usetex = True)
 plt.rc('font', family = 'serif')
 
+def flux_to_counts(flux, l, h = 6.62606957e-27, c = 2.99792458e18, t = 1200., a = 9.6e4, dl = 1.4):
+	'''
+	Convert a flux measurement (in e-17 erg/s/cm^2/A) into a photon counts measurement. Acts on a single data row at a time.
+	'''
+
+	fluxcal = 1e17 * h*c/( (l) * dl * t * a )
+	return flux / fluxcal
+
+def counts_to_flux(counts, l, h = 6.62606957e-27, c = 2.99792458e18, t = 1200., a = 9.6e4, dl = 1.4):
+	'''
+	Convert a counts measurement into a flux measurement (in e-17 erg/s/cm^2/A). Acts on a single data row at a time.
+	'''
+	
+	fluxcal = 1e17 * h*c/( (l) * dl * t * a )
+	return counts * fluxcal
+
+
 def interp_corr(im, fiberflat, verbose = False, full = False):
 	'''
 	Use fiberflat image to provide a small correction to the detector counts. Applied to all fibers at once.
