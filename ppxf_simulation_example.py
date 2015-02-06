@@ -135,6 +135,7 @@ def ppxf_simulation_example():
     plt.ylabel('$h_4$')
 
     plt.tight_layout()
+    plt.show()
 
 #----------------------------------------------------------------------------
 

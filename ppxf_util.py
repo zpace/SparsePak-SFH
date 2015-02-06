@@ -175,9 +175,7 @@ def determine_goodpixels(logLam, lamRangeTemp, vel):
 #                     -----[OII]-----    Hdelta   Hgamma   Hbeta   -----[OIII]-----   [OI]    -----[NII]-----   Halpha   -----[SII]-----
     lines = np.array([3726.03, 3728.82, 4101.76, 4340.47, 4861.33, 4958.92, 5006.84, 6300.30, 6548.03, 6583.41, 6562.80, 6716.47, 6730.85])
     #sky lines              NaI     OI    HgI    Atm
-    lines = lines.append([5683.88, 5577., 5461., 5199.])
-
-    print lines
+    #lines = lines.append([5683.88, 5577., 5461., 5199.])
 
     dv = lines*0 + 800 # width/2 of masked gas emission region in km/s
     c = 299792.458 # speed of light in km/s
