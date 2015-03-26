@@ -183,6 +183,7 @@ def ppxf_population_example_sdss():
 
     plt.subplot(212)
     s = templates.shape
+    print(s)
     weights = pp.weights.reshape(s[1],s[2])/pp.weights.sum()
     plt.imshow(np.rot90(weights), interpolation='nearest', cmap='gist_heat',
                aspect='auto', extent=(np.log10(1.0), np.log10(17.7828), -1.9, 0.45))
@@ -194,9 +195,10 @@ def ppxf_population_example_sdss():
     plt.show()
 
     vazdekis = glob.glob('miles_models/Mun1.30*.fits')
-
+    '''
     for i in range(len(vazdekis)):
         print(vazdekis[i].rstrip('.fits').split('/')[-1], weights.flatten()[i])
+    '''
 
 #------------------------------------------------------------------------------
 

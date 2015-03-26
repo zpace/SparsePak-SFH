@@ -26,6 +26,10 @@ Version 0.3.0 (Jan 2015)
 	- corrected to include both the survey-found z and a dz
 	- added a blur parameter, along with a blur visualizer
 	- provided SED in erg/s/cm^2/A, eliminating 10^-17 factor to make it more machine-readable
+
+Version 0.4.0 (Mar 2015)
+	- transcribed pPXF fit routine
+	- added SNR calculations
 '''
 
 #SYNTAX EXAMPLE
@@ -42,35 +46,33 @@ z, ifu_corr = SPaCT.sdss_cal(im, fiberflat, sdss, .0095, verbose = True)
 SPaCT.write_corr_frame(ifu_corr, im, z, 'NGC2558')
 '''
 
-import numpy as np
-import astroML
-import matplotlib.pyplot as plt
-#import pyfits as fits
-from astropy.io import fits
-from astroML.datasets import fetch_sdss_spectrum
-import scipy as sp
-import colorpy.ciexyz as ciexyz
-import colorpy.colormodels as cmodels
+def plusminus(s):
+	import numpy as np
 
-plt.rc('text', usetex = True)
-plt.rc('font', family = 'serif')
+	if s == 'p':
+		return 1.
+	if s == 'm':
+		return -1.
+	else:
+		print 'bad input: plusminus takes either \'p\' or \'m\'!'
 
 def flux_to_counts(flux, l, h = 6.62606957e-27, c = 2.99792458e18, t = 1200., a = 9.6e4, dl = 1.4):
+	import numpy as np
 	'''
-	Convert a flux measurement (in e-17 erg/s/cm^2/A) into a photon counts measurement. Acts on a single data row at a time.
+	Convert a flux measurement (in erg/s/cm^2/AA) into a photon counts measurement. Acts on a single data row at a time.
 	'''
 
-	fluxcal = 1e17 * h*c/( (l) * dl * t * a )
+	fluxcal = h*c/( (l) * dl * t * a )
 	return flux / fluxcal
 
 def counts_to_flux(counts, l, h = 6.62606957e-27, c = 2.99792458e18, t = 1200., a = 9.6e4, dl = 1.4):
+	import numpy as np
 	'''
-	Convert a counts measurement into a flux measurement (in e-17 erg/s/cm^2/A). Acts on a single data row at a time.
+	Convert a counts measurement into a flux measurement (in erg/s/cm^2/AA). Acts on a single data row at a time.
 	'''
 	
-	fluxcal = 1e17 * h*c/( (l) * dl * t * a )
+	fluxcal = h*c/( (l) * dl * t * a )
 	return counts * fluxcal
-
 
 def interp_corr(im, fiberflat, verbose = False, full = False):
 	'''
@@ -89,6 +91,10 @@ def interp_corr(im, fiberflat, verbose = False, full = False):
 	[- ifu_div_corr_m: division-correction (unsmoothed) matrix]
 	[- ifu_interp_corr_m: interpolation-correction (smoothed) matrix]
 	'''
+
+	import numpy as np
+	import matplotlib.pyplot as plt
+	from astropy.io import fits
 
 	# im contains the IFU data in layer [0].data
 	ifu = im[0].data
@@ -184,8 +190,11 @@ def z_test(im, fiberflat, sdss, fiber = 47, dz = 0.):
 
 	Returns:
 	 - scaled SDSS spectrum
-
 	'''
+
+	import numpy as np
+	import matplotlib.pyplot as plt
+	from astropy.io import fits
 
 	ifu = im[0].data
 
@@ -222,7 +231,7 @@ def z_test(im, fiberflat, sdss, fiber = 47, dz = 0.):
 
 	return sdss.spectrum/np.max(sdss.spectrum) * np.percentile(sparsepak_spectrum, 98.)
 
-def sdss_cal(im, fiberflat, sdss, dz, z = 0, verbose = False, fiber = 47, blur = 100):
+def sdss_cal(im, fiberflat, sdss, dz, z = 0, verbose = False, fiber = 47, blur = 100, full_output = False):
 	'''
 	using a known dz, calculate a correction to a SparsePak spectrum based on an SDSS spectrum of the same object. 
 
@@ -235,11 +244,17 @@ def sdss_cal(im, fiberflat, sdss, dz, z = 0, verbose = False, fiber = 47, blur =
 	 - verbose (False): display plots?
 	 - fiber (47): plot which fiber?
 	 - blur (50): size of gaussian blur
+	 - full_output (False): return the correction array?
 
 	Returns:
 	 - dz: redshift offset (same as argument)
 	 - ifu_corr: corrected IFU science frame (in np array format)
+	 - corr_poly: polynomial-interpolated correction array
 	'''
+
+	import numpy as np
+	import matplotlib.pyplot as plt
+	from astropy.io import fits
 
 	# load properties of un-corrected science frame
 	NAXIS1 = im[0].header['NAXIS1']
@@ -257,7 +272,7 @@ def sdss_cal(im, fiberflat, sdss, dz, z = 0, verbose = False, fiber = 47, blur =
 
 	# theoretical flux-calibration for the observed counts
 	fluxcal = h*c/( (sparsepak_wavelength) * dl * t * a )
-	sparsepak_spectrum = fluxcal * interp_corr(im, fiberflat)
+	sparsepak_spectrum = counts_to_flux(interp_corr(im, fiberflat), sparsepak_wavelength)
 	sparsepak_spectrum_ctr = sparsepak_spectrum[fiber]
 
 	sdss_spectrum = sdss.spectrum/np.max(sdss.spectrum) * np.percentile(sparsepak_spectrum, 98.)
@@ -344,7 +359,8 @@ def sdss_cal(im, fiberflat, sdss, dz, z = 0, verbose = False, fiber = 47, blur =
 
 	ifu_corr = sparsepak_spectrum * np.polyval(corr_poly, sparsepak_wavelength)
 
-	return dz, ifu_corr
+	if full_output == True: return dz, ifu_corr, np.polyval(corr_poly, sparsepak_wavelength)
+	else: return dz, ifu_corr
 
 def write_corr_frame(ifu_corr, im, z, dz, objname, verbose = False):
 	'''
@@ -360,6 +376,10 @@ def write_corr_frame(ifu_corr, im, z, dz, objname, verbose = False):
 
 	Returns: NONE
 	'''
+
+	import numpy as np
+	import matplotlib.pyplot as plt
+	from astropy.io import fits
 
 	NAXIS1 = im[0].header['NAXIS1']
 	CRVAL1 = im[0].header['CRVAL1']
@@ -402,7 +422,287 @@ def load_ifus_precorrection(objname):
 	 - fiberflat: .fits HDU of fiberflat frame (obtained through reduction pipeline)
 	'''
 
+	from astropy.io import fits
+
 	return fits.open(objname + '.msobj.fits'), fits.open(objname + '.fiberflat.fits')
+
+def noise_edgefibers(ifu, width, fiberlist, verbose = False):
+    '''
+	Find the noise in a sparsepak spectrum by median-combining edge fibers, then taking their statistics
+	
+	Make sure to feed it a FULL IFU ARRAY in flux units. It will output noise in flux units, as well.
+	
+	This will work if fibers are similar in response and there's not any appreciable non-uniformity in sky subtraction
+    '''
+
+    import pandas as pd
+    import numpy as np
+
+    if fiberlist == None:
+    	fiberlist = [51, 4, 1, 8, 10, 65, 71, 53]
+    print fiberlist
+
+    if verbose == True: print 'width:', width
+    #first select th e correct fibers from ifu and median-combine them
+    ifu = np.median(ifu[fiberlist], axis = 0)
+    #now slide an aperture of some width over the spectrum
+    #and take the stdev of the data in that window
+    noise_array_1 = pd.rolling_std(ifu, window = width, center = True, min_periods = 1)
+    noise_array_2 = pd.rolling_std(ifu[::-1], window = width, center = True, min_periods = 1)
+    #requires a little reshaping
+    noise = np.nanmean(np.concatenate((noise_array_1, noise_array_2[::-1])).reshape((2, len(noise_array_1))), axis = 0)
+    return noise
+
+def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, noise_plots = False, fit_plots = False, reddening = None, age_lim = 13.6, edgefibers = [51, 4, 1, 8, 10, 65, 71, 53], n_moments = 4, bias = None):
+	'''
+	Run Cappellari et al.'s pPXF on a SparsePak fiber
+
+	Arguments:
+	 - ifu: full IFU science array, put through all the reduction & correction ordeals
+	 - fiber: which fiber data row to use
+	 - l_summ: tuple of (CRVAL1, CDELT1, NAXIS1)
+	 - z: approximate starting redshift (using the quoted SDSS value is pretty safe)
+	 - template_set ('MILES'): which set of templates to use (either MILES or Vazdekis--MILES recommended)
+	 - noise_plots (False): plot noise characteristics of the fiber?
+	 - verbose (False): provide updates & diagnostics on fit
+	 - fit_plots (False): plot total fit & population diagram?
+	 - reddening (None): E(B-V) estimate
+	'''
+	import numpy as np
+	import matplotlib.pyplot as plt
+	from scipy.stats import signaltonoise
+	from astropy.io import fits
+
+	import sys
+	import ppxf_util as util
+	from ppxf import ppxf
+	import glob as glob
+	from scipy import ndimage
+	from time import clock
+
+	from astroML.datasets import fetch_sdss_spectrum
+	import scipy as sp
+	import colorpy.ciexyz as ciexyz
+	import colorpy.colormodels as cmodels
+	import warnings
+
+	CRVAL1, CDELT1, NAXIS1 = l_summ
+	lamRange1 = np.array([CRVAL1, CRVAL1 + CDELT1 * NAXIS1])
+	FWHM_gal = 4.877 # FWHM from SparsePak simulator
+
+	lamRange1 = lamRange1 / (1 + z)
+	FWHM_gal = FWHM_gal / (1 + z)
+
+	galaxy, logLam1, velscale = util.log_rebin(lamRange1, ifu[fiber])
+
+	#keep track of which pixels are negative, to mask them out later
+	negative_pixels = np.where(galaxy < 0.)[0]
+	galaxy = np.abs(galaxy)
+
+	if verbose == True: print velscale[0], 'km/s/pix'
+
+	#which template set is being used? make some decisions based on that
+	if template_set == 'MILES':
+		template_files = glob.glob('miles_models/Mun*.fits')
+		template_files = [ i for i in template_files if float(i[-12:-5]) < age_lim ]
+		FWHM_tem = 1.5 # Miles spectra have FWHM of 1.5A
+	elif template_set == 'vazdekis':
+		template_files = glob.glob(directory + 'Rbi1.30z*.fits')
+		FWHM_tem = 1.8 # Vazdekis spectra have a resolution FWHM of 1.8A.
+		galaxy, logLam1 = galaxy[:10], logLam1[:-10]
+	else:
+		raise NameError('Invalid template set. Only \'vazdekis\' and \'MILES\' are valid at this time.')
+
+	# Extract the wavelength range and logarithmically rebin one spectrum
+	# to the same velocity scale of the SparsePak galaxy spectrum, to determine
+	# the size needed for the array which will contain the template spectra.
+
+	hdu = fits.open(template_files[0])
+	ssp = hdu[0].data
+	h2 = hdu[0].header
+	lamRange2 = h2['CRVAL1'] + np.array([0.,h2['CDELT1']*(h2['NAXIS1']-1)])
+	sspNew, logLam2, velscale = util.log_rebin(lamRange2, ssp, velscale=velscale)
+	templates = np.empty((sspNew.size,len(template_files)))
+
+	if verbose == True:
+		print 'SparsePak range:', lamRange1
+		print 'Template range:', lamRange2
+
+	# Pare down the SparsePak spectrum so that its wavelength range is
+	# contained within the template spectrum's wavelength range
+
+	galaxy = galaxy[(logLam1 >= logLam2[0]) * (logLam1 <= logLam2[-1])]
+	logLam1 = logLam1[(logLam1 >= logLam2[0]) * (logLam1 <= logLam2[-1])]
+	# the MILES templates run into issues at the red end of the spectra b/c of correction in interpolation
+	
+	l = np.exp(logLam1)
+
+	#we can define noise in 2 ways: 
+	#first with a rolling aperture over median-combined edge fibers (noise_edgefibers)
+	#second with a stdev measurement of a bunch of fibers
+
+	noise = noise_edgefibers(ifu, 25, fiberlist = edgefibers)
+	if verbose == True: print 'noise: \n', noise
+	noise_2 = np.mean(ifu[edgefibers], axis = 0) / signaltonoise(ifu[edgefibers])
+	if verbose == True: print 'noise_2: \n', noise_2
+	if noise_plots == True:
+		plt.figure(figsize = (8,6))
+		ax1 = plt.subplot2grid((2, 2), (0, 0)) #SNR hist for noise
+		ax2 = plt.subplot2grid((2, 2), (0, 1)) #SNR hist for noise_2
+		ax3 = plt.subplot2grid((2, 2), (1, 0), colspan = 2) #plot of noise
+		ax1.hist(galaxy/noise, bins = 50)
+		ax1.axvline(np.mean(galaxy/noise), c = 'r', linestyle = '--')
+		ax1.set_title('SNR for rolling StDev', size = 16)
+
+		print np.sum(np.isnan(galaxy/noise_2))
+
+		ax2.hist(galaxy/noise_2, bins = 50)
+		ax2.axvline(np.mean(galaxy/noise_2), c = 'r', linestyle = '--')
+		ax2.set_title('SNR for direct StDev', size = 16)
+		ax2.set_xlim([ax2.get_ylim()[0], np.percentile(noise, 99.9)])
+
+		ax3.plot(galaxy/noise, label = 'Rolling StDev')
+		#ax3.plot(galaxy/noise_2, label = 'Direct StDev')
+		ax3.set_ylim([ax3.get_ylim()[0], np.percentile(noise, 99.9)])
+		ax3.legend(loc = 'best')
+		ax3.set_title('SNR by $\lambda$', size = 16)
+		plt.show()
+
+	#munge the templates to get characteristics
+	ssp_rows = []
+	from astropy.table import Table
+	import astropy
+
+	for template in template_files:
+	    template = template.rstrip('.fits').split('/')[1]
+	    
+	    spectral_range = template[0]
+	    IMF_type = template[1:3]
+	    IMF_slope = float(template[3:7])
+	    Z = plusminus(template[8])*float(template[9:13])
+	    T = float(template[14:])
+    
+	    #print template + ':', spectral_range, IMF_type, IMF_slope, Z, T
+	    ssp_i = [template, spectral_range, IMF_type, IMF_slope, Z, T]
+	    ssp_rows.append(ssp_i)
+
+	ssps = Table(map(list, zip(*ssp_rows)), names = ['template name', 'spectral range', 'IMF type', 'IMF slope', 'Z', 't'])
+
+	if verbose == True:
+		print ssps
+		plt.figure(figsize = (4,6))
+		plt.scatter(ssps['Z'], ssps['t'])
+		plt.xlabel('Z', size = 16)
+		plt.ylabel('age', size = 16)
+		plt.title('SSPs used', size = 16)
+		plt.show()
+
+	# Convolve the whole SSP library of spectral templates
+	# with the quadratic difference between the SAURON and the
+	# Vazdekis instrumental resolution. Logarithmically rebin
+	# and store each template as a column in the array TEMPLATES.
+
+	# Quadratic sigma difference in pixels SSP --> instrument FWHM
+	# The formula below is rigorously valid if the shapes of the
+	# instrumental spectral profiles are well approximated by Gaussians.
+
+	FWHM_dif = np.sqrt(FWHM_gal**2 - FWHM_tem**2)
+	sigma = FWHM_dif/2.355/h2['CDELT1'] # Sigma difference in pixels
+
+	for j in range(len(template_files)):
+	    hdu = fits.open(template_files[j])
+	    ssp = hdu[0].data
+	    ssp = ndimage.gaussian_filter1d(ssp,sigma)
+	    sspNew, logLam2, velscale = util.log_rebin(lamRange2, ssp, velscale=velscale)
+	    templates[:,j] = sspNew/np.median(sspNew) # Normalizes templates
+
+	# The galaxy and the template spectra do not have the same starting wavelength.
+	# For this reason an extra velocity shift DV has to be applied to the template
+	# to fit the galaxy spectrum. We remove this artificial shift by using the
+	# keyword VSYST in the call to PPXF below, so that all velocities are
+	# measured with respect to DV. This assume the redshift is negligible.
+	# In the case of a high-redshift galaxy one should de-redshift its
+	# wavelength to the rest frame before using the line below (see above).
+
+	c = 299792.458
+	dv = (logLam2[0]-logLam1[0])*c # km/s
+	print 'dv:', dv, 'km/s'
+
+	vel = 0.
+	print 'SDSS velocity:', c*z, 'km/s'
+	goodPixels = util.determine_goodpixels(logLam1,lamRange2,vel)
+	#mask out the OI sky line and whatever weirdness goes along with it
+	goodPixels = np.array([pixel for pixel in goodPixels if not 1183 <= pixel <= 1200])
+	#mask out last 100 pixels with weird end behavior
+	goodPixels = np.array([pixel for pixel in goodPixels if not len(galaxy) - 100 <= pixel <= len(galaxy)])
+	#mask out pixels that were originally negative
+	goodPixels = np.array([pixel for pixel in goodPixels if pixel not in negative_pixels])
+
+	# Here the actual fit starts. The best fit is plotted on the screen.
+	# Gas emission lines are excluded from the pPXF fit using the GOODPIXELS keyword.
+
+	start = [vel, 3.*velscale] # (km/s), starting guess for [V,sigma]
+
+	t = clock()
+
+	with warnings.catch_warnings():
+		warnings.simplefilter("ignore", category = DeprecationWarning)
+
+		if fit_plots == True:
+			plt.subplot(211)
+
+			pp = ppxf(templates, galaxy/np.median(galaxy), noise/np.median(galaxy), velscale, start, 
+			          goodpixels = goodPixels, clean = True, plot = True, moments = n_moments, degree = 4, 
+			          vsyst = dv, reddening = reddening, lam = np.exp(logLam1), bias = bias)
+			plt.fill_between(np.arange(0, len(noise_2)), galaxy - noise_2, galaxy + noise_2, edgecolor = 'green', facecolor = 'green', alpha = 0.5)
+
+			plt.tick_params(axis='both', which='major', labelsize=16)
+
+			plt.twiny()
+			newxticks = np.linspace(-.02, 1.02, 10)
+			newxticklabels = CRVAL1 + newxticks*NAXIS1*CDELT1
+			plt.xticks(newxticks, newxticklabels.astype(int))
+			plt.xlabel('$\lambda[\AA]$', size = 16)
+
+
+			#look for emission lines
+			balmer = [ ['$\\alpha$', 6563.], ['$\\beta$', 4861.], ['$\\gamma$', 4341.], ['$\\delta$', 4102.] ]
+			for line in balmer:
+			    line_c = cmodels.irgb_string_from_xyz(ciexyz.xyz_from_wavelength(line[1]/10.))
+			    plt.axvline(line[1] * ((z + 1)*(1 + pp.sol[0]/c)), color = line_c)
+			    plt.annotate('H-' + line[0], xy = (line[1], 1.2), xytext = (line[1]+10., 1.2), size = 14)
+
+			plt.tick_params(axis='both', which='major', labelsize=16)
+
+			plt.subplot(212)
+			s = templates.shape
+			print s
+			print np.size(pp.weights)
+			weights = pp.weights.reshape((len(np.unique(ssps['t'])), len(np.unique(ssps['Z']))))/pp.weights.sum()
+			plt.imshow(np.rot90(weights), interpolation='nearest', cmap='gnuplot2',
+			           aspect='auto', extent=(np.log10(np.min(ssps['t'])), np.log10(np.max(ssps['t'])), np.min(ssps['Z']), np.max(ssps['Z'])))
+			plt.colorbar()
+			plt.title("Mass Fraction", size = 16)
+			plt.xlabel("log$_{10}$ Age (Gyr)", size = 16)
+			plt.ylabel("[M/H]", size = 16)
+			plt.tick_params(axis='both', which='major', labelsize=16)
+			plt.tight_layout()
+
+			print("Formal errors:")
+			print("     dV    dsigma   dh3      dh4")
+			print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
+
+			print('Elapsed time in PPXF: %.2f s' % (clock() - t))
+			print 'Best-fitting redshift z:', (z + 1)*(1 + pp.sol[0]/c) - 1, '+/-', np.abs((pp.error*np.sqrt(pp.chi2)/c))[0]
+
+			plt.show()
+
+		else:
+			pp = ppxf(templates, galaxy/np.median(galaxy), noise/np.median(galaxy), velscale, start, 
+			          goodpixels = goodPixels, clean = True, quiet = True, degree = 4, 
+			          vsyst = dv, reddening = reddening, lam = np.exp(logLam1), moments = n_moments, bias = bias)
+
+	return pp
 
 '''
 im, fiberflat = load_ifus_precorrection('NGC2558')
