@@ -255,6 +255,9 @@ def sdss_cal(im, fiberflat, sdss, dz, z = 0, verbose = False, fiber = 47, blur =
 	import numpy as np
 	import matplotlib.pyplot as plt
 	from astropy.io import fits
+	import scipy as sp
+	import colorpy.ciexyz as ciexyz
+	import colorpy.colormodels as cmodels
 
 	# load properties of un-corrected science frame
 	NAXIS1 = im[0].header['NAXIS1']
@@ -440,7 +443,7 @@ def noise_edgefibers(ifu, width, fiberlist, verbose = False):
 
     if fiberlist == None:
     	fiberlist = [51, 4, 1, 8, 10, 65, 71, 53]
-    print fiberlist
+    #print fiberlist
 
     if verbose == True: print 'width:', width
     #first select th e correct fibers from ifu and median-combine them
@@ -453,7 +456,136 @@ def noise_edgefibers(ifu, width, fiberlist, verbose = False):
     noise = np.nanmean(np.concatenate((noise_array_1, noise_array_2[::-1])).reshape((2, len(noise_array_1))), axis = 0)
     return noise
 
-def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, noise_plots = False, fit_plots = False, reddening = None, age_lim = 13.6, edgefibers = [51, 4, 1, 8, 10, 65, 71, 53], n_moments = 4, bias = None):
+def lin_remap(old, oldrange, newrange):
+	'''
+	linearly remaps an array to a different range
+	'''
+	import numpy as np
+
+	newmin, newmax = newrange
+	oldmin, oldmax = oldrange
+	new = ( (old - oldmin) / (oldmax - oldmin) ) * (newmax - newmin) + newmin
+	return new
+
+def circles(x, y, s, c='b', ax=None, vmin=None, vmax=None, **kwargs):
+	"""
+	Make a scatter of circles plot of x vs y, where x and y are sequence 
+	like objects of the same lengths. The size of circles are in data scale.
+
+	Parameters
+	----------
+	x,y : scalar or array_like, shape (n, )
+	Input data
+	s : scalar or array_like, shape (n, ) 
+		Radius of circle in data scale (ie. in data unit)
+	c : color or sequence of color, optional, default : 'b'
+		`c` can be a single color format string, or a sequence of color
+		specifications of length `N`, or a sequence of `N` numbers to be
+		mapped to colors using the `cmap` and `norm` specified via kwargs.
+		Note that `c` should not be a single numeric RGB or
+		RGBA sequence because that is indistinguishable from an array of
+		values to be colormapped.  `c` can be a 2-D array in which the
+		rows are RGB or RGBA, however.
+	ax : Axes object, optional, default: None
+		Parent axes of the plot. It uses gca() if not specified.
+		vmin, vmax : scalar, optional, default: None
+		`vmin` and `vmax` are used in conjunction with `norm` to normalize
+		luminance data.  If either are `None`, the min and max of the
+		color array is used.  (Note if you pass a `norm` instance, your
+		settings for `vmin` and `vmax` will be ignored.)
+
+	Returns
+	-------
+	paths : `~matplotlib.collections.PathCollection`
+
+	Other parameters
+	----------------
+	kwargs : `~matplotlib.collections.Collection` properties
+		eg. alpha, edgecolors, facecolors, linewidths, linestyles, norm, cmap
+
+	Examples
+	--------
+	a = np.arange(11)
+	circles(a, a, a*0.2, c=a, alpha=0.5, edgecolor='none')
+	"""
+	from matplotlib.patches import Circle
+	from matplotlib.collections import PatchCollection
+	import pylab as plt
+	import numpy as np
+	#import matplotlib.colors as colors
+
+	if ax is None:
+		ax = plt.gca()    
+
+	if isinstance(c,basestring):
+		color = c     # ie. use colors.colorConverter.to_rgba_array(c)
+	else:
+		color = None  # use cmap, norm after collection is created
+	kwargs.update(color=color)
+
+	if isinstance(x, (int, long, float)):
+		patches = [Circle((x, y), s),]
+	elif isinstance(s, (int, long, float)):
+		patches = [Circle((x_,y_), s) for x_,y_ in zip(x,y)]
+	else:
+		patches = [Circle((x_,y_), s_) for x_,y_,s_ in zip(x,y,s)]
+	collection = PatchCollection(patches, **kwargs)
+
+	if color is None:
+		collection.set_array(np.asarray(c))
+		if vmin is not None or vmax is not None:
+			collection.set_clim(vmin, vmax)
+
+	ax.add_collection(collection)
+	return collection
+
+def gal_im_fiber_plot(objname, fibers, quantity, qty_dets = '', fibersize = 4.687, text = False):
+	'''
+	fibers is an astropy table mostly in format of `fiberdata.dat`, 
+	with an additional row based on what is being plotted
+	'''
+	import numpy as np
+	import matplotlib.pyplot as plt
+	import matplotlib.image as mpimg
+
+	fig = plt.figure(figsize = (4, 4), dpi = 200)
+
+	#you can get custom-sized images at http://skyserver.sdss3.org/dr10/en/tools/chart/image.aspx
+	#explore at http://skyserver.sdss3.org/dr10/en/tools/explore/default.aspx
+
+	im = mpimg.imread(objname + '.png')
+	x = y = np.linspace(-40., 40., np.shape(im)[0])
+	X, Y = np.meshgrid(x, y)
+	galim = plt.imshow(im, extent = [-40, 40, -40, 40], origin = 'lower', interpolation = 'nearest', zorder = 0)
+
+	fibers = fibers[fibers['sky'] != 1]
+	fibers = fibers[np.isnan(fibers[quantity]) == False]
+	print fibers
+	
+	if quantity != None:
+		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., c = fibers[quantity], cmap = 'gnuplot2', edgecolor = 'w', alpha = 0.8, zorder = 2)
+		cbar = fig.colorbar(cir, shrink=0.8)
+		cbar.set_label(quantity + qty_dets, size = 16)
+	else:
+		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., edgecolor = 'k', alpha = 0.8, zorder = 2)
+
+	if text == True:
+		for row in fibers:
+			if row['sky']!=1:
+				plt.text(row['ra']-1., row['dec']-1.75, s = str(row['fiber']) + '\n' + str(row['row']), color = 'g', size = 14, zorder = 3)
+
+	plt.xlim([-40, 40])
+	plt.ylim([-40, 40])
+	plt.xlabel('RA offset (arcsec)', fontsize = 16)
+	plt.ylabel('Dec offset (arcsec)', fontsize = 16)
+	plt.title(objname, fontsize = 18)
+	plt.tight_layout()
+	plt.show()
+
+def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, 
+	noise_plots = False, fit_plots = False, reddening = None, age_lim = 13.6, 
+	edgefibers = [51, 4, 1, 8, 10, 65, 71, 53], n_moments = 4, bias = None,
+	objname = '', clean = False, quiet = False):
 	'''
 	Run Cappellari et al.'s pPXF on a SparsePak fiber
 
@@ -541,9 +673,11 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, nois
 	#first with a rolling aperture over median-combined edge fibers (noise_edgefibers)
 	#second with a stdev measurement of a bunch of fibers
 
-	noise = noise_edgefibers(ifu, 25, fiberlist = edgefibers)
+	noise_multiplier = 1.
+
+	noise = noise_multiplier*noise_edgefibers(ifu, 3, fiberlist = edgefibers)
 	if verbose == True: print 'noise: \n', noise
-	noise_2 = np.mean(ifu[edgefibers], axis = 0) / signaltonoise(ifu[edgefibers])
+	noise_2 = noise_multiplier*np.mean(ifu[edgefibers], axis = 0) / signaltonoise(ifu[edgefibers])
 	if verbose == True: print 'noise_2: \n', noise_2
 	if noise_plots == True:
 		plt.figure(figsize = (8,6))
@@ -562,7 +696,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, nois
 		ax2.set_xlim([ax2.get_ylim()[0], np.percentile(noise, 99.9)])
 
 		ax3.plot(galaxy/noise, label = 'Rolling StDev')
-		#ax3.plot(galaxy/noise_2, label = 'Direct StDev')
+		ax3.plot(galaxy/noise_2, label = 'Direct StDev')
 		ax3.set_ylim([ax3.get_ylim()[0], np.percentile(noise, 99.9)])
 		ax3.legend(loc = 'best')
 		ax3.set_title('SNR by $\lambda$', size = 16)
@@ -570,7 +704,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, nois
 
 	#munge the templates to get characteristics
 	ssp_rows = []
-	from astropy.table import Table
+	from astropy.table import Table, Column
 	import astropy
 
 	for template in template_files:
@@ -587,6 +721,11 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, nois
 	    ssp_rows.append(ssp_i)
 
 	ssps = Table(map(list, zip(*ssp_rows)), names = ['template name', 'spectral range', 'IMF type', 'IMF slope', 'Z', 't'])
+	ssps.sort(['Z', 't'])
+
+	template_prefix = template_files[0].split('/')[0]
+	#print template_prefix
+	template_files = ssps['template name']
 
 	if verbose == True:
 		print ssps
@@ -610,7 +749,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, nois
 	sigma = FWHM_dif/2.355/h2['CDELT1'] # Sigma difference in pixels
 
 	for j in range(len(template_files)):
-	    hdu = fits.open(template_files[j])
+	    hdu = fits.open(template_prefix + '/' + template_files[j] + '.fits')
 	    ssp = hdu[0].data
 	    ssp = ndimage.gaussian_filter1d(ssp,sigma)
 	    sspNew, logLam2, velscale = util.log_rebin(lamRange2, ssp, velscale=velscale)
@@ -626,10 +765,10 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, nois
 
 	c = 299792.458
 	dv = (logLam2[0]-logLam1[0])*c # km/s
-	print 'dv:', dv, 'km/s'
+	#print 'dv:', dv, 'km/s'
 
 	vel = 0.
-	print 'SDSS velocity:', c*z, 'km/s'
+	#print 'SDSS velocity:', c*z, 'km/s'
 	goodPixels = util.determine_goodpixels(logLam1,lamRange2,vel)
 	#mask out the OI sky line and whatever weirdness goes along with it
 	goodPixels = np.array([pixel for pixel in goodPixels if not 1183 <= pixel <= 1200])
@@ -645,64 +784,85 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, nois
 
 	t = clock()
 
+	log_ages = np.log10(ssps['t'])
+	d_log_ages = np.mean(log_ages[1:] - log_ages[:-1])
+	dz = np.abs(np.mean(ssps['Z'][1:] - ssps['Z'][:-1]))
+
 	with warnings.catch_warnings():
 		warnings.simplefilter("ignore", category = DeprecationWarning)
 
 		if fit_plots == True:
+			plt.figure(figsize = (8, 6))
 			plt.subplot(211)
 
-			pp = ppxf(templates, galaxy/np.median(galaxy), noise/np.median(galaxy), velscale, start, 
-			          goodpixels = goodPixels, clean = True, plot = True, moments = n_moments, degree = 4, 
-			          vsyst = dv, reddening = reddening, lam = np.exp(logLam1), bias = bias)
-			plt.fill_between(np.arange(0, len(noise_2)), galaxy - noise_2, galaxy + noise_2, edgecolor = 'green', facecolor = 'green', alpha = 0.5)
+		lam = np.exp(logLam1)
 
-			plt.tick_params(axis='both', which='major', labelsize=16)
+		pp = ppxf(templates, galaxy/np.median(galaxy), noise/np.median(galaxy), velscale, start, 
+			goodpixels = goodPixels, clean = clean, plot = fit_plots, moments = n_moments, degree = 4, 
+			vsyst = dv, reddening = reddening, lam = lam, bias = bias, quiet = quiet)
+		
+		if fit_plots == True:
+			plt.fill_between(np.arange(0, len(noise)), (galaxy - noise)/np.median(galaxy), (galaxy + noise)/np.median(galaxy), edgecolor = 'green', facecolor = 'green', alpha = 0.5)
 
-			plt.twiny()
-			newxticks = np.linspace(-.02, 1.02, 10)
-			newxticklabels = CRVAL1 + newxticks*NAXIS1*CDELT1
-			plt.xticks(newxticks, newxticklabels.astype(int))
+			label_locs = np.arange(100.*np.floor(np.min(lam)/100.), 100.*np.ceil(np.max(lam)/100.), 200).astype(int)
+			plt.xticks(lin_remap( label_locs, (lam[0], lam[-1]), (0, len(lam)) ), label_locs)
 			plt.xlabel('$\lambda[\AA]$', size = 16)
-
-
+			
 			#look for emission lines
-			balmer = [ ['$\\alpha$', 6563.], ['$\\beta$', 4861.], ['$\\gamma$', 4341.], ['$\\delta$', 4102.] ]
-			for line in balmer:
+			'''
+			spec_lines = [ ['H-$\\alpha$', 6563.], ['H-$\\beta$', 4861.], ['H-$\\gamma$', 4341.], ['H-$\\delta$', 4102.], ['Ca H', 3968.5], ['Ca K', 3933.7] ]
+			for (i, line) in enumerate(spec_lines):
 			    line_c = cmodels.irgb_string_from_xyz(ciexyz.xyz_from_wavelength(line[1]/10.))
-			    plt.axvline(line[1] * ((z + 1)*(1 + pp.sol[0]/c)), color = line_c)
-			    plt.annotate('H-' + line[0], xy = (line[1], 1.2), xytext = (line[1]+10., 1.2), size = 14)
-
-			plt.tick_params(axis='both', which='major', labelsize=16)
+			    line_l = line[1] * (z + pp.sol[0]/c + 1.)
+			    line_x = lin_remap(line_l, (lam[0], lam[-1]), (0, len(lam)) )
+			    print line[0], line_l, line_x
+			    plt.axvline(line_x, color = line_c)
+			    plt.annotate(line[0], xy = (line_x, 1.2), xytext = (line_x+10., 0.3), size = 14)
+			'''
+			plt.tick_params(axis = 'both', which = 'major', labelsize = 12)
+			plt.subplots_adjust(top = 0.8)
 
 			plt.subplot(212)
 			s = templates.shape
-			print s
-			print np.size(pp.weights)
-			weights = pp.weights.reshape((len(np.unique(ssps['t'])), len(np.unique(ssps['Z']))))/pp.weights.sum()
-			plt.imshow(np.rot90(weights), interpolation='nearest', cmap='gnuplot2',
-			           aspect='auto', extent=(np.log10(np.min(ssps['t'])), np.log10(np.max(ssps['t'])), np.min(ssps['Z']), np.max(ssps['Z'])))
+			#print s
+			#print np.size(pp.weights)
+
+			#make a weights array for display, s.t. # rows = # Z vals
+			#and # cols = # age vals
+
+			weights = np.reshape(pp.weights, (len(np.unique(ssps['Z'])), len(np.unique(ssps['t']))))
+			#print weights
+
+			plt.imshow(weights, origin = 'lower', interpolation='nearest', cmap='gnuplot2',
+				aspect='auto', extent=(np.log10(np.min(ssps['t'])) - d_log_ages/2., np.log10(np.max(ssps['t'])) + d_log_ages/2., np.min(ssps['Z']) - dz/2., np.max(ssps['Z']) + dz/2.), 
+				vmin = 0.0, vmax = 1.0)
 			plt.colorbar()
 			plt.title("Mass Fraction", size = 16)
 			plt.xlabel("log$_{10}$ Age (Gyr)", size = 16)
 			plt.ylabel("[M/H]", size = 16)
-			plt.tick_params(axis='both', which='major', labelsize=16)
-			plt.tight_layout()
+			plt.tick_params(axis = 'y', which = 'major', labelsize = 16)
+			plt.tick_params(axis = 'x', which = 'major', labelsize = 16)
+			#plt.gca().set_yticks(np.unique(ssps['Z']))
+			plt.gca().set_xticks(np.linspace(0., 1.1, 12))
 
-			print("Formal errors:")
-			print("     dV    dsigma   dh3      dh4")
-			print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
+			plt.suptitle(objname + ' pPXF fit: fiber ' + str(fiber), size = 18)
+			plt.tight_layout(rect = [0, 0.03, 1, 0.95])
 
-			print('Elapsed time in PPXF: %.2f s' % (clock() - t))
-			print 'Best-fitting redshift z:', (z + 1)*(1 + pp.sol[0]/c) - 1, '+/-', np.abs((pp.error*np.sqrt(pp.chi2)/c))[0]
+		print("Formal errors:")
+		print("     dV    dsigma   dh3      dh4")
+		print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
 
-			plt.show()
+		print('Elapsed time in PPXF: %.2f s' % (clock() - t))
+		print 'Best-fitting redshift z:', (z + 1)*(1 + pp.sol[0]/c) - 1, '+/-', np.abs((pp.error*np.sqrt(pp.chi2)/c))[0]
 
-		else:
-			pp = ppxf(templates, galaxy/np.median(galaxy), noise/np.median(galaxy), velscale, start, 
-			          goodpixels = goodPixels, clean = True, quiet = True, degree = 4, 
-			          vsyst = dv, reddening = reddening, lam = np.exp(logLam1), moments = n_moments, bias = bias)
+	ssps.add_column(Column(name = 'fits', data = pp.weights))
 
-	return pp
+	#ssps.pprint(max_lines = -1)
+	#print ssps#[ssps['fits'] != 0.]
+
+	if fit_plots == True: plt.show()
+
+	return pp, ssps
 
 '''
 im, fiberflat = load_ifus_precorrection('NGC2558')
