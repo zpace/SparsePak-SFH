@@ -539,7 +539,7 @@ def circles(x, y, s, c='b', ax=None, vmin=None, vmax=None, **kwargs):
 	ax.add_collection(collection)
 	return collection
 
-def gal_im_fiber_plot(objname, fibers, quantity, qty_dets = '', fibersize = 4.687, text = False):
+def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '', fibersize = 4.687, text = False):
 	'''
 	fibers is an astropy table mostly in format of `fiberdata.dat`, 
 	with an additional row based on what is being plotted
@@ -560,7 +560,7 @@ def gal_im_fiber_plot(objname, fibers, quantity, qty_dets = '', fibersize = 4.68
 
 	fibers = fibers[fibers['sky'] != 1]
 	fibers = fibers[np.isnan(fibers[quantity]) == False]
-	print fibers
+	#print fibers
 	
 	if quantity != None:
 		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., c = fibers[quantity], cmap = 'gnuplot2', edgecolor = 'w', alpha = 0.8, zorder = 2)
@@ -578,6 +578,22 @@ def gal_im_fiber_plot(objname, fibers, quantity, qty_dets = '', fibersize = 4.68
 	plt.ylim([-40, 40])
 	plt.xlabel('RA offset (arcsec)', fontsize = 16)
 	plt.ylabel('Dec offset (arcsec)', fontsize = 16)
+	plt.title(objname, fontsize = 18)
+	plt.tight_layout()
+	plt.show()
+
+def gal_rad_dep_plot(objname, fibers, quantity, qty_dets = ''):
+	import numpy as np
+	import matplotlib.pyplot as plt
+
+	fibers = fibers[fibers['sky'] != 1]
+	fibers = fibers[np.isnan(fibers[quantity]) == False]
+
+	plt.figure(figsize = (4, 4))
+	plt.scatter(fibers['r'], fibers[quantity], marker = 'x')
+
+	plt.ylabel(quantity + qty_dets, size = 16)
+	plt.xlabel('radius [arcsec]', size = 16)
 	plt.title(objname, fontsize = 18)
 	plt.tight_layout()
 	plt.show()
