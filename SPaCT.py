@@ -30,6 +30,9 @@ Version 0.3.0 (Jan 2015)
 Version 0.4.0 (Mar 2015)
 	- transcribed pPXF fit routine
 	- added SNR calculations
+
+Version 0.5.0 (Apr 2015)
+	- corrected pPXF wrapper per M. Cappellari's suggestions
 '''
 
 #SYNTAX EXAMPLE
@@ -436,6 +439,8 @@ def noise_edgefibers(ifu, width, fiberlist, verbose = False):
 	Make sure to feed it a FULL IFU ARRAY in flux units. It will output noise in flux units, as well.
 	
 	This will work if fibers are similar in response and there's not any appreciable non-uniformity in sky subtraction
+    
+	NOW DEPRECATED
     '''
 
     import pandas as pd
@@ -521,7 +526,7 @@ def circles(x, y, s, c='b', ax=None, vmin=None, vmax=None, **kwargs):
 		color = c     # ie. use colors.colorConverter.to_rgba_array(c)
 	else:
 		color = None  # use cmap, norm after collection is created
-	kwargs.update(color=color)
+	kwargs.update(color=color, edgecolor = None)
 
 	if isinstance(x, (int, long, float)):
 		patches = [Circle((x, y), s),]
@@ -539,11 +544,13 @@ def circles(x, y, s, c='b', ax=None, vmin=None, vmax=None, **kwargs):
 	ax.add_collection(collection)
 	return collection
 
-def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '', fibersize = 4.687, text = False):
+def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '', 
+	fibersize = 4.687, text = False, save = False):
 	'''
 	fibers is an astropy table mostly in format of `fiberdata.dat`, 
 	with an additional row based on what is being plotted
 	'''
+	import os
 	import numpy as np
 	import matplotlib.pyplot as plt
 	import matplotlib.image as mpimg
@@ -567,7 +574,7 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '', fibersize
 		cbar = fig.colorbar(cir, shrink=0.8)
 		cbar.set_label(quantity + qty_dets, size = 16)
 	else:
-		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., edgecolor = 'k', alpha = 0.8, zorder = 2)
+		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., edgecolor = 'None', alpha = 0.8, zorder = 2)
 
 	if text == True:
 		for row in fibers:
@@ -580,9 +587,18 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '', fibersize
 	plt.ylabel('Dec offset (arcsec)', fontsize = 16)
 	plt.title(objname, fontsize = 18)
 	plt.tight_layout()
-	plt.show()
 
-def gal_rad_dep_plot(objname, fibers, quantity, qty_dets = ''):
+	if (save == True) and (quantity != None):
+		try:
+			os.makedirs(objname)
+		except OSError:
+			pass
+		plt.savefig(objname + '/' + quantity + 'map.png')
+	else:
+		plt.show()
+
+def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', save = False):
+	import os
 	import numpy as np
 	import matplotlib.pyplot as plt
 
@@ -590,18 +606,34 @@ def gal_rad_dep_plot(objname, fibers, quantity, qty_dets = ''):
 	fibers = fibers[np.isnan(fibers[quantity]) == False]
 
 	plt.figure(figsize = (4, 4))
-	plt.scatter(fibers['r'], fibers[quantity], marker = 'x')
+	if 'd' + quantity in fibers.colnames:
+		plt.errorbar(fibers['r'], fibers[quantity], yerr = fibers['d' + quantity], fmt = 'x')
+	else: 
+		plt.scatter(fibers['r'], fibers[quantity], marker = 'x')
 
+	if (quantity == 'V') or (quantity == 'sigma'):
+		yllim = np.max(np.insert(np.array(fibers[quantity]), 0, -1000.))
+		yulim = np.min(np.insert(np.array(fibers[quantity]), 0, 1000.))
+		plt.ylim([0.8*yllim, 1.2*yulim])
 	plt.ylabel(quantity + qty_dets, size = 16)
 	plt.xlabel('radius [arcsec]', size = 16)
 	plt.title(objname, fontsize = 18)
 	plt.tight_layout()
-	plt.show()
+
+	if (save == True) and (quantity != None):
+		try:
+			os.makedirs(objname)
+		except OSError:
+			pass
+		
+		plt.savefig(objname + '/' + quantity + 'grad.png')
+	else:
+		plt.show()
 
 def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, 
 	noise_plots = False, fit_plots = False, reddening = None, age_lim = 13.6, 
-	edgefibers = [51, 4, 1, 8, 10, 65, 71, 53], n_moments = 4, bias = None,
-	objname = '', clean = False, quiet = False):
+	n_moments = 4, bias = None,	objname = '', clean = False, quiet = False, 
+	oversample = False):
 	'''
 	Run Cappellari et al.'s pPXF on a SparsePak fiber
 
@@ -684,39 +716,6 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	# the MILES templates run into issues at the red end of the spectra b/c of correction in interpolation
 	
 	l = np.exp(logLam1)
-
-	#we can define noise in 2 ways: 
-	#first with a rolling aperture over median-combined edge fibers (noise_edgefibers)
-	#second with a stdev measurement of a bunch of fibers
-
-	noise_multiplier = 1.
-
-	noise = noise_multiplier*noise_edgefibers(ifu, 3, fiberlist = edgefibers)
-	if verbose == True: print 'noise: \n', noise
-	noise_2 = noise_multiplier*np.mean(ifu[edgefibers], axis = 0) / signaltonoise(ifu[edgefibers])
-	if verbose == True: print 'noise_2: \n', noise_2
-	if noise_plots == True:
-		plt.figure(figsize = (8,6))
-		ax1 = plt.subplot2grid((2, 2), (0, 0)) #SNR hist for noise
-		ax2 = plt.subplot2grid((2, 2), (0, 1)) #SNR hist for noise_2
-		ax3 = plt.subplot2grid((2, 2), (1, 0), colspan = 2) #plot of noise
-		ax1.hist(galaxy/noise, bins = 50)
-		ax1.axvline(np.mean(galaxy/noise), c = 'r', linestyle = '--')
-		ax1.set_title('SNR for rolling StDev', size = 16)
-
-		print np.sum(np.isnan(galaxy/noise_2))
-
-		ax2.hist(galaxy/noise_2, bins = 50)
-		ax2.axvline(np.mean(galaxy/noise_2), c = 'r', linestyle = '--')
-		ax2.set_title('SNR for direct StDev', size = 16)
-		ax2.set_xlim([ax2.get_ylim()[0], np.percentile(noise, 99.9)])
-
-		ax3.plot(galaxy/noise, label = 'Rolling StDev')
-		ax3.plot(galaxy/noise_2, label = 'Direct StDev')
-		ax3.set_ylim([ax3.get_ylim()[0], np.percentile(noise, 99.9)])
-		ax3.legend(loc = 'best')
-		ax3.set_title('SNR by $\lambda$', size = 16)
-		plt.show()
 
 	#munge the templates to get characteristics
 	ssp_rows = []
@@ -813,9 +812,27 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 
 		lam = np.exp(logLam1)
 
-		pp = ppxf(templates, galaxy/np.median(galaxy), noise/np.median(galaxy), velscale, start, 
-			goodpixels = goodPixels, clean = clean, plot = fit_plots, moments = n_moments, degree = 4, 
-			vsyst = dv, reddening = reddening, lam = lam, bias = bias, quiet = quiet)
+		print start
+
+		pp = ppxf(templates = templates, galaxy = galaxy/np.median(galaxy), noise = galaxy*0.+1.,
+			velScale = velscale, start = start, goodpixels = goodPixels, plot = False, 
+			moments = n_moments, degree = 4, vsyst = dv, reddening = reddening, 
+			lam = lam, quiet = True)
+		#print 'First pass successful'
+		print 'First pass results'
+		print pp.sol
+
+		noise = np.abs(pp.bestfit - galaxy/np.median(galaxy))
+
+		pp = ppxf(templates = templates, galaxy = galaxy/np.median(galaxy), noise = noise, 
+			velScale = velscale, start = pp.sol[:2], goodpixels = goodPixels, clean = clean, 
+			plot = fit_plots, moments = n_moments, degree = 4, vsyst = dv, 
+			reddening = reddening, lam = lam, bias = bias, quiet = quiet, 
+			oversample = oversample, regul = 50., reg_dim = 2)
+		print 'Second pass results'
+		print pp.sol
+
+		#print 'Second pass successful'
 		
 		if fit_plots == True:
 			plt.fill_between(np.arange(0, len(noise)), (galaxy - noise)/np.median(galaxy), (galaxy + noise)/np.median(galaxy), edgecolor = 'green', facecolor = 'green', alpha = 0.5)
@@ -847,6 +864,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			#and # cols = # age vals
 
 			weights = np.reshape(pp.weights, (len(np.unique(ssps['Z'])), len(np.unique(ssps['t']))))
+			weights /= weights.sum()
 			#print weights
 
 			plt.imshow(weights, origin = 'lower', interpolation='nearest', cmap='gnuplot2',
@@ -864,12 +882,14 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			plt.suptitle(objname + ' pPXF fit: fiber ' + str(fiber), size = 18)
 			plt.tight_layout(rect = [0, 0.03, 1, 0.95])
 
+		'''
 		print("Formal errors:")
 		print("     dV    dsigma   dh3      dh4")
 		print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
 
 		print('Elapsed time in PPXF: %.2f s' % (clock() - t))
 		print 'Best-fitting redshift z:', (z + 1)*(1 + pp.sol[0]/c) - 1, '+/-', np.abs((pp.error*np.sqrt(pp.chi2)/c))[0]
+		'''
 
 	ssps.add_column(Column(name = 'fits', data = pp.weights))
 
@@ -880,6 +900,107 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 
 	return pp, ssps
 
+def pPXF_run_galaxy(objname, save = False):
+	import ppxf
+	from astroML.datasets import fetch_sdss_spectrum
+	import warnings
+	import matplotlib.pyplot as plt
+	import astropy.io.fits as fits
+	import astropy.io.ascii as ascii
+	import astropy.table as table
+	import numpy as np
+
+	warnings.filterwarnings('ignore', message = "Polyfit may be poorly conditioned")
+	warnings.filterwarnings("ignore", message = "using a non-integer number instead of an integer will result in an error in the future")
+
+	#plt.rc('text', usetex = True)
+	plt.rc('font', family = 'serif')
+	plt.rcParams['figure.figsize'] = 16, 12
+
+	objects = {
+		'NGC2558': {'z': 0.0166076, 'EBV': .0417, 'sdss_spec': (1927, 53321, 290)},
+		'NGC2557': {'z': 0.0161257, 'EBV': .0366, 'sdss_spec': (1927, 53321, 387)},
+		'NGC2562': {'z': 0.0168859, 'EBV': .0376, 'sdss_spec': (1927, 53321, 186)},
+		'NGC2563': {'z': 0.0150407, 'EBV': .0381, 'sdss_spec': (1927, 53321, 194)},
+		'NGC4061': {'z': 0.0244529, 'EBV': .0290, 'sdss_spec': (2608, 54474, 514)},
+		'NGC6109': {'z': 0.0298147, 'EBV': .0196, 'sdss_spec': (1057, 52522, 391)},
+		'NGC5846': {'z': None, 'EBV': .0477, 'sdss_spec': (None, None, None)},
+		'UGC04344': {'z': 0.0167887, 'EBV': .0439, 'sdss_spec': (1927, 53321, 230)},
+		'UGC04329': {'z': 0.0136599, 'EBV': .0440, 'sdss_spec': (4479, 55592, 204)}
+	}
+
+	#reddenings from IRSA (Schlafly & Finkbeiner 2011), using 5' radius from center
+
+	z = objects[objname]['z']
+	EBV = objects[objname]['EBV']
+	dz = 0.
+
+	fiberdata = ascii.read('fiberdata.dat')
+	#print fiberdata
+
+	im, fiberflat = load_ifus_precorrection(objname)
+
+	plate = objects[objname]['sdss_spec'][0]
+	mjd = objects[objname]['sdss_spec'][1]
+	sdss_fiber = objects[objname]['sdss_spec'][2]
+	sdss = fetch_sdss_spectrum(plate, mjd, sdss_fiber)
+
+	dz, ifu_corr, corr_poly = sdss_cal(im, fiberflat, sdss, dz = 0., z = z, verbose = False, blur = 75, full_output = True)
+	write_corr_frame(ifu_corr, im, z, dz, objname, verbose = False)
+
+	fiberdata.add_column(table.Column(name = 'Z', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 't', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 'V', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 'sigma', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 'dV', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 'dsigma', data = np.nan*np.ones(len(fiberdata['row']))))
+
+	for i, fiber_entry in enumerate(fiberdata[fiberdata['row'] != -9999]):
+		#print fiber_entry
+		fiber = fiber_entry['row']
+		#if fiber != -9999:
+		print 'Running fiber', fiber
+
+		n_moments = 2
+
+		ifu = fits.open(objname + '_fluxcal.fits')[0].data
+		try:
+			pp, ssps = SP_pPXF((ifu.T/np.median(ifu, axis = 1)).T, fiber = fiber, l_summ = (3907., 1.4, 1934), 
+				z = z + dz, verbose = False, noise_plots = False, fit_plots = True, clean = True, quiet = True, 
+				age_lim = 13.5, n_moments = n_moments, bias = None, objname = objname, 
+				oversample = False, reddening = EBV)
+
+			fiber_Z = np.log10(np.average(10.**ssps['Z'], weights = ssps['fits']))
+			fiber_age = np.average(ssps['t'], weights = ssps['fits'])
+			fiber_V = pp.sol[0]
+			fiber_sigma = pp.sol[1]
+			fiber_V_err = pp.error[0]
+			fiber_sigma_err = pp.error[1]
+
+			fiberdata['Z'][np.where(fiberdata['row'] == fiber)] = fiber_Z
+			fiberdata['t'][np.where(fiberdata['row'] == fiber)] = fiber_age
+			fiberdata['V'][np.where(fiberdata['row'] == fiber)] = fiber_V
+			fiberdata['sigma'][np.where(fiberdata['row'] == fiber)] = fiber_sigma
+			fiberdata['dV'][np.where(fiberdata['row'] == fiber)] = fiber_V_err
+			fiberdata['dsigma'][np.where(fiberdata['row'] == fiber)] = fiber_sigma_err
+
+			print 'Fiber', fiber, 'done!'
+
+		except ZeroDivisionError:
+			print 'No fit in fiber', fiber
+
+		if i >= 1: break
+	'''
+	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 't', qty_dets = '[Gyr]', save = save)
+	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'Z', qty_dets = '[M/H]', save = save)
+	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = save)
+	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = save)
+
+	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 't', qty_dets = '[Gyr]', save = save)
+	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'Z', qty_dets = '[M/H]', save = save)
+	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = save)
+	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = save)
+	'''
 '''
 im, fiberflat = load_ifus_precorrection('NGC2558')
 
@@ -900,3 +1021,5 @@ z_test(im, fiberflat, sdss, fiber = 47, dz = .0000)
 dz, ifu_corr = sdss_cal(im, fiberflat, sdss, dz = 0., verbose = True)
 #write_corr_frame(ifu_corr, im, .017, dz, 'NGC2558')
 '''
+
+pPXF_run_galaxy('UGC04344', save = True)
