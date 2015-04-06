@@ -1022,4 +1022,4 @@ dz, ifu_corr = sdss_cal(im, fiberflat, sdss, dz = 0., verbose = True)
 #write_corr_frame(ifu_corr, im, .017, dz, 'NGC2558')
 '''
 
-pPXF_run_galaxy('UGC04344', save = True)
+pPXF_run_galaxy('NGC2558', save = True)
