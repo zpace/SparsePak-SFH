@@ -99,6 +99,8 @@ def setup_spectral_library(velscale, FWHM_gal):
             sspNew, logLam2, velscale = util.log_rebin(lamRange_temp, ssp, velscale=velscale)
             templates[:,j,k] = sspNew # Templates are *not* normalized here
 
+    print(np.shape(templates))
+
     return templates, lamRange_temp
 
 #------------------------------------------------------------------------------
