@@ -634,7 +634,7 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', save = Fal
 def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, 
 	noise_plots = False, fit_plots = False, reddening = None, age_lim = 13.6, 
 	n_moments = 4, bias = None,	objname = '', clean = True, quiet = False, 
-	oversample = False, save_fits = False):
+	oversample = False, save_fits = False, gas_comps = None):
 	'''
 	Run Cappellari et al.'s pPXF on a SparsePak fiber
 
@@ -648,6 +648,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	 - verbose (False): provide updates & diagnostics on fit
 	 - fit_plots (False): plot total fit & population diagram?
 	 - reddening (None): E(B-V) estimate
+	 - gas_comps (None): how many gas components to use (if it's `None`, then pPXF just fits the gas)
 	'''
 	import numpy as np
 	import matplotlib.pyplot as plt
@@ -828,30 +829,87 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 
 		print start
 
+		#first pass: initial fit of parameters, no noise, no regul, no gas
+
 		pp = ppxf(templates = templates, galaxy = galaxy/np.median(galaxy), noise = galaxy*0.+1.,
-			velScale = velscale, start = start, goodpixels = goodPixels, plot = False, 
+			velScale = velscale, start = start, goodpixels = goodPixels, plot = False,
 			moments = n_moments, degree = 4, vsyst = dv, reddening = reddening, 
 			lam = lam, quiet = True)
 		#print 'First pass successful'
-		if verbose == True:
-			print 'First pass results'
-			print pp.sol
+		print 'First pass results'
+		print '\t', pp.sol
+		print '\tChi2/DOF =', pp.chi2 #this will be anomalous, since uniform noise spectrum is assumed
 
+		#new noise spectrum will be residual from 1st fit
 		noise = np.abs(pp.bestfit - galaxy/np.median(galaxy))
+
+		pp = ppxf(templates = templates, galaxy = galaxy/np.median(galaxy), noise = noise, 
+			velScale = velscale, start = pp.sol[:2], goodpixels = goodPixels, clean = False, 
+			moments = n_moments, degree = 4, vsyst = dv, quiet = True,
+			reddening = reddening, lam = lam, bias = bias, 
+			oversample = oversample, regul = 100., reg_dim = reg_dim)
+		print 'Second pass results'
+		print '\t', pp.sol
+		print '\tChi2/DOF =', pp.chi2
+
+		print 'rescaling by', pp.chi2
+
+		noise *= np.sqrt(pp.chi2)
+
+		#rescale noise by factor sqrt(pp.chi2)
+
+		#add a gas component, if called for
+		#this requires making `moments` into lists with length equal to
+		#the number of components, as seen in `ppxf_population_gas_example.py`
+
+		nStar_templates = templates.shape[-1]
+		nGas_templates = 0
+
+		if gas_comps != None:
+			#BE CAREFUL!!!
+			#`nGas_templates` is the number of gas emission lines that are given for each kinematic component
+			#`gas_comps` is the number of gas components
+			#if you confuse these two, you're gonna have a bad time
+			gas_templates, line_names, line_wave = util.emission_lines(logLam2, lamRange1, FWHM_gal)
+			nGas_templates = gas_templates.shape[1]
+			gas_templates = np.tile(gas_templates, (1, gas_comps))
+			print gas_templates.shape
+			print templates.shape
+			all_templates = np.hstack([templates, gas_templates])
+
+			#now modify the starting kinematics
+
+			moments = [n_moments] + [2] * nGas_templates
+			start = [start] * (nGas_templates + 1)
+
+		component = [for i in range(1, nGas_templates)]
+		[0] * nStar_templates + [1] * nGas_templates
 
 		pp = ppxf(templates = templates, galaxy = galaxy/np.median(galaxy), noise = noise, 
 			velScale = velscale, start = pp.sol[:2], goodpixels = goodPixels, clean = clean, 
 			plot = fit_plots, moments = n_moments, degree = 4, vsyst = dv, 
 			reddening = reddening, lam = lam, bias = bias, quiet = quiet, 
-			oversample = oversample, regul = 100., reg_dim = reg_dim)
-		print 'Second pass results'
-		print pp.sol
-		print 'Chi2/DOF =', pp.chi2
+			oversample = oversample, regul = 100., reg_dim = reg_dim, component = component)	
 
-		#print 'Second pass successful'
+		print 'Final pass results'
+		print '\t', pp.sol
+		print '\tChi2/DOF =', pp.chi2
+
+		if gas_comps != None:
+			gas = pp.matrix[:,-nLines:].dot(pp.weights[-nLines:])
+			w = np.where(np.array(component) == 1)[0] # Extract weights of gas emissions
+			print('Gas V=%.4g and sigma=%.2g km/s' % (pp.sol[1][0], pp.sol[1][1]))
+			print('Emission lines peak intensity:')
+			for name, weight, line in zip(line_names, pp.weights[w], pp.matrix[:,w].T):
+				print('%12s: %.3g' % (name, weight*np.max(line)))
+
+		#print 'Third pass successful'
 		
 		if fit_plots == True:
 			plt.fill_between(np.arange(0, len(noise)), (galaxy - noise)/np.median(galaxy), (galaxy + noise)/np.median(galaxy), edgecolor = 'green', facecolor = 'green', alpha = 0.5)
+
+			if gas_comps != None: 
+				plt.plot(np.arange(0, len(noise)), gas + 0.15, c = 'b', linewidth = 2)
 
 			label_locs = np.arange(100.*np.floor(np.min(lam)/100.), 100.*np.ceil(np.max(lam)/100.), 200).astype(int)
 			plt.xticks(lin_remap( label_locs, (lam[0], lam[-1]), (0, len(lam)) ), label_locs)
@@ -940,7 +998,7 @@ def pPXF_make_derived_plots(objname):
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True)
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True)
 
-def pPXF_run_galaxy(objname, first_few = None):
+def pPXF_run_galaxy(objname, first_few = None, gas_comps = None):
 	import ppxf
 	from astroML.datasets import fetch_sdss_spectrum
 	import warnings
@@ -1009,7 +1067,7 @@ def pPXF_run_galaxy(objname, first_few = None):
 			pp, ssps = SP_pPXF((ifu.T/np.median(ifu, axis = 1)).T, fiber = fiber, l_summ = (3907., 1.4, 1934), 
 				z = z + dz, verbose = False, noise_plots = False, fit_plots = True, save_fits = True, 
 				clean = True, quiet = True, age_lim = 13.5, n_moments = n_moments, 
-				bias = None, objname = objname, oversample = False, reddening = EBV)
+				bias = None, objname = objname, oversample = False, reddening = EBV, gas_comps = gas_comps)
 
 			fiber_Z = np.log10(np.average(10.**ssps['Z'], weights = ssps['fits']))
 			fiber_age = np.average(ssps['t'], weights = ssps['fits'])
