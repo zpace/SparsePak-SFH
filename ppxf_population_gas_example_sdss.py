@@ -151,7 +151,9 @@ def ppxf_population_gas_example_sdss():
     # needed to specify the regularization dimensions
     #
     reg_dim = stars_templates.shape[1:]
+    print(stars_templates.shape, reg_dim)
     stars_templates = stars_templates.reshape(stars_templates.shape[0],-1)
+    print(stars_templates.reshape(stars_templates.shape[0],-1).shape)
 
     # See the pPXF documentation for the keyword REGUL,
     # for an explanation of the following two lines

@@ -634,7 +634,7 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', save = Fal
 def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, 
 	noise_plots = False, fit_plots = False, reddening = None, age_lim = 13.6, 
 	n_moments = 4, bias = None,	objname = '', clean = True, quiet = False, 
-	oversample = False):
+	oversample = False, save_fits = False):
 	'''
 	Run Cappellari et al.'s pPXF on a SparsePak fiber
 
@@ -666,6 +666,8 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	import colorpy.ciexyz as ciexyz
 	import colorpy.colormodels as cmodels
 	import warnings
+
+	import os
 
 	CRVAL1, CDELT1, NAXIS1 = l_summ
 	lamRange1 = np.array([CRVAL1, CRVAL1 + CDELT1 * NAXIS1])
@@ -805,8 +807,15 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 
 	#now reshape the templates according to the number of Z and t values available
 	nZ, nt, nalpha = len(np.unique(ssps['Z'])), len(np.unique(ssps['t'])), len(np.unique(ssps['IMF slope']))
-	templates = np.reshape(templates, ( len(templates[:,0]), nt, nZ, nalpha ) )
+	templates = np.reshape(templates, ( len(templates[:,0]), nZ, nt, nalpha ) )
 	print np.shape(templates)
+
+	reg_dim = templates.shape[1:]
+	if reg_dim[-1] == 1.:
+		reg_dim = reg_dim[:-1]
+	print reg_dim
+
+	templates = templates.reshape(templates.shape[0],-1)
 
 	with warnings.catch_warnings():
 		warnings.simplefilter("ignore", category = DeprecationWarning)
@@ -824,8 +833,9 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			moments = n_moments, degree = 4, vsyst = dv, reddening = reddening, 
 			lam = lam, quiet = True)
 		#print 'First pass successful'
-		print 'First pass results'
-		print pp.sol
+		if verbose == True:
+			print 'First pass results'
+			print pp.sol
 
 		noise = np.abs(pp.bestfit - galaxy/np.median(galaxy))
 
@@ -833,10 +843,10 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			velScale = velscale, start = pp.sol[:2], goodpixels = goodPixels, clean = clean, 
 			plot = fit_plots, moments = n_moments, degree = 4, vsyst = dv, 
 			reddening = reddening, lam = lam, bias = bias, quiet = quiet, 
-			oversample = oversample, regul = 250., reg_dim = 4)
+			oversample = oversample, regul = 100., reg_dim = reg_dim)
 		print 'Second pass results'
 		print pp.sol
-		print pp.chi2
+		print 'Chi2/DOF =', pp.chi2
 
 		#print 'Second pass successful'
 		
@@ -902,7 +912,16 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	#ssps.pprint(max_lines = -1)
 	#print ssps#[ssps['fits'] != 0.]
 
-	if fit_plots == True: plt.show()
+	if fit_plots == True: 
+		if save_fits == False: 
+			plt.show()
+		else:
+			try:
+				os.makedirs(objname)
+			except OSError:
+				pass
+		
+		plt.savefig(objname + '/' + str(fiber) + '.png')
 
 	return pp, ssps
 
@@ -921,7 +940,7 @@ def pPXF_make_derived_plots(objname):
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True)
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True)
 
-def pPXF_run_galaxy(objname):
+def pPXF_run_galaxy(objname, first_few = None):
 	import ppxf
 	from astroML.datasets import fetch_sdss_spectrum
 	import warnings
@@ -988,9 +1007,9 @@ def pPXF_run_galaxy(objname):
 		ifu = fits.open(objname + '_fluxcal.fits')[0].data
 		try:
 			pp, ssps = SP_pPXF((ifu.T/np.median(ifu, axis = 1)).T, fiber = fiber, l_summ = (3907., 1.4, 1934), 
-				z = z + dz, verbose = False, noise_plots = False, fit_plots = False, clean = True, quiet = True, 
-				age_lim = 13.5, n_moments = n_moments, bias = None, objname = objname, 
-				oversample = False, reddening = EBV)
+				z = z + dz, verbose = False, noise_plots = False, fit_plots = True, save_fits = True, 
+				clean = True, quiet = True, age_lim = 13.5, n_moments = n_moments, 
+				bias = None, objname = objname, oversample = False, reddening = EBV)
 
 			fiber_Z = np.log10(np.average(10.**ssps['Z'], weights = ssps['fits']))
 			fiber_age = np.average(ssps['t'], weights = ssps['fits'])
@@ -1011,13 +1030,17 @@ def pPXF_run_galaxy(objname):
 		except ZeroDivisionError:
 			print 'No fit in fiber', fiber
 
-		#if i >= 1: break
+		if first_few:
+			if i >= (first_few - 1):
+				break
 
-	try:
-		os.makedirs(objname)
-	except OSError:
-		pass
-	fiberdata.write(objname + '/fiberfits.dat', format = 'ascii')
+	if not first_few:
+		try:
+			os.makedirs(objname)
+		except OSError:
+			pass
+		fiberdata.write(objname + '/fiberfits.dat', format = 'ascii')
+		print 'Written to', objname + '/fiberfits.dat'
 
 '''
 im, fiberflat = load_ifus_precorrection('NGC2558')
