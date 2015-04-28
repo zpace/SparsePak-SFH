@@ -571,7 +571,7 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '',
 	#print fibers
 	
 	if quantity != None:
-		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., c = fibers[quantity], alpha = 0.8, zorder = 2)
+		cir = plotting_tools.circles(fibers['ra'], fibers['dec'], s = fibersize/2., c = fibers[quantity], alpha = 0.8, zorder = 2)
 		cbar = fig.colorbar(cir, shrink=0.8)
 		cbar.set_label(quantity + qty_dets, size = 16)
 	else:
@@ -809,12 +809,12 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	#now reshape the templates according to the number of Z and t values available
 	nZ, nt, nalpha = len(np.unique(ssps['Z'])), len(np.unique(ssps['t'])), len(np.unique(ssps['IMF slope']))
 	templates = np.reshape(templates, ( len(templates[:,0]), nZ, nt, nalpha ) )
-	print np.shape(templates)
+	#print np.shape(templates)
 
 	reg_dim = templates.shape[1:]
 	if reg_dim[-1] == 1.:
 		reg_dim = reg_dim[:-1]
-	print reg_dim
+	#print reg_dim
 
 	templates = templates.reshape(templates.shape[0],-1)
 
@@ -827,7 +827,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 
 		lam = np.exp(logLam1)
 
-		print start
+		print 'ICs:', start
 
 		#first pass: initial fit of parameters, no noise, no regul, no gas
 
@@ -864,44 +864,64 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 
 		nStar_templates = templates.shape[-1]
 		nGas_templates = 0
+		start = pp.sol[:2] #re-initialize the start values, in preparation for another run, if necessary
 
-		if gas_comps != None:
+		if gas_comps not in (0, None):
 			#BE CAREFUL!!!
 			#`nGas_templates` is the number of gas emission lines that are given for each kinematic component
 			#`gas_comps` is the number of gas components
 			#if you confuse these two, you're gonna have a bad time
+
+			#also, gas_comps > 1 untested!
+
 			gas_templates, line_names, line_wave = util.emission_lines(logLam2, lamRange1, FWHM_gal)
-			nGas_templates = gas_templates.shape[1]
+			nGas_templates = gas_templates.shape[-1]
 			gas_templates = np.tile(gas_templates, (1, gas_comps))
-			print gas_templates.shape
-			print templates.shape
+			#print gas_templates.shape
+			#print templates.shape
 			all_templates = np.hstack([templates, gas_templates])
 
-			#now modify the starting kinematics
+			#now modify the starting kinematics to permit multiple components
+			moments = [n_moments] + [-2] + [2] * (gas_comps - 1)
+			start = [start] * (gas_comps + 1)
+		else:
+			gas_comps = 0
+			all_templates = templates
 
-			moments = [n_moments] + [2] * nGas_templates
-			start = [start] * (nGas_templates + 1)
+		#print all_templates.shape
 
-		component = [for i in range(1, nGas_templates)]
-		[0] * nStar_templates + [1] * nGas_templates
+		print 'gas components:', gas_comps
+		print 'emission lines per gas component:', nGas_templates
+		
+		component = [0] * nStar_templates
 
-		pp = ppxf(templates = templates, galaxy = galaxy/np.median(galaxy), noise = noise, 
-			velScale = velscale, start = pp.sol[:2], goodpixels = goodPixels, clean = clean, 
-			plot = fit_plots, moments = n_moments, degree = 4, vsyst = dv, 
+		for gascomp_number in range(1, gas_comps + 1):
+			component.extend([gascomp_number] * nGas_templates)
+
+		#print len(component)
+
+		pp = ppxf(templates = all_templates, galaxy = galaxy/np.median(galaxy), noise = noise, 
+			velScale = velscale, start = start, goodpixels = goodPixels, clean = clean, 
+			plot = fit_plots, moments = moments, degree = 4, vsyst = dv, 
 			reddening = reddening, lam = lam, bias = bias, quiet = quiet, 
 			oversample = oversample, regul = 100., reg_dim = reg_dim, component = component)	
 
 		print 'Final pass results'
-		print '\t', pp.sol
+		if gas_comps > 0:
+			print '\t', pp.sol[0]
+		else:
+			print '\t', pp.sol
 		print '\tChi2/DOF =', pp.chi2
 
-		if gas_comps != None:
-			gas = pp.matrix[:,-nLines:].dot(pp.weights[-nLines:])
-			w = np.where(np.array(component) == 1)[0] # Extract weights of gas emissions
-			print('Gas V=%.4g and sigma=%.2g km/s' % (pp.sol[1][0], pp.sol[1][1]))
-			print('Emission lines peak intensity:')
-			for name, weight, line in zip(line_names, pp.weights[w], pp.matrix[:,w].T):
-				print('%12s: %.3g' % (name, weight*np.max(line)))
+		if gas_comps not in (0, None):
+			for i in range(1, gas_comps + 1):
+				gas = pp.matrix[:,-nGas_templates:].dot(pp.weights[-nGas_templates:])
+				w = np.where(np.array(component) == gas_comps)[0] # Extract weights of gas emissions
+				print 'Gas component', i
+				print '\t', pp.sol[i][:2]
+				print 'Emission lines peak intensity:'
+				for name, weight, line in zip(line_names, pp.weights[w], pp.matrix[:,w].T):
+					print('\t %12s: %.3g' % (name, weight*np.max(line)))
 
 		#print 'Third pass successful'
 		
@@ -915,29 +935,17 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			plt.xticks(lin_remap( label_locs, (lam[0], lam[-1]), (0, len(lam)) ), label_locs)
 			plt.xlabel('$\lambda[\AA]$', size = 16)
 			
-			#look for emission lines
-			'''
-			spec_lines = [ ['H-$\\alpha$', 6563.], ['H-$\\beta$', 4861.], ['H-$\\gamma$', 4341.], ['H-$\\delta$', 4102.], ['Ca H', 3968.5], ['Ca K', 3933.7] ]
-			for (i, line) in enumerate(spec_lines):
-			    line_c = cmodels.irgb_string_from_xyz(ciexyz.xyz_from_wavelength(line[1]/10.))
-			    line_l = line[1] * (z + pp.sol[0]/c + 1.)
-			    line_x = lin_remap(line_l, (lam[0], lam[-1]), (0, len(lam)) )
-			    print line[0], line_l, line_x
-			    plt.axvline(line_x, color = line_c)
-			    plt.annotate(line[0], xy = (line_x, 1.2), xytext = (line_x+10., 0.3), size = 14)
-			'''
 			plt.tick_params(axis = 'both', which = 'major', labelsize = 12)
 			plt.subplots_adjust(top = 0.8)
 
 			plt.subplot(212)
-			s = templates.shape
 			#print s
-			#print np.size(pp.weights)
 
 			#make a weights array for display, s.t. # rows = # Z vals
 			#and # cols = # age vals
 
-			weights = np.reshape(pp.weights, (len(np.unique(ssps['Z'])), len(np.unique(ssps['t']))))
+			#extract the kinematics of the stars first
+			weights = np.reshape(pp.weights[:nStar_templates], (len(np.unique(ssps['Z'])), len(np.unique(ssps['t']))))
 			weights /= weights.sum()
 			#print weights
 
@@ -965,7 +973,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 		print 'Best-fitting redshift z:', (z + 1)*(1 + pp.sol[0]/c) - 1, '+/-', np.abs((pp.error*np.sqrt(pp.chi2)/c))[0]
 		'''
 
-	ssps.add_column(Column(name = 'fits', data = pp.weights))
+	ssps.add_column(Column(name = 'fits', data = pp.weights[:nStar_templates]))
 
 	#ssps.pprint(max_lines = -1)
 	#print ssps#[ssps['fits'] != 0.]
