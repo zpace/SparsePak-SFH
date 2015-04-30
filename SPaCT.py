@@ -634,7 +634,7 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', save = Fal
 def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, 
 	noise_plots = False, fit_plots = False, reddening = None, age_lim = 13.6, 
 	n_moments = 4, bias = None,	objname = '', clean = True, quiet = False, 
-	oversample = False, save_fits = False, gas_comps = None):
+	oversample = False, save_fits = False, gas_comps = None, regul = 100.):
 	'''
 	Run Cappellari et al.'s pPXF on a SparsePak fiber
 
@@ -648,7 +648,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	 - verbose (False): provide updates & diagnostics on fit
 	 - fit_plots (False): plot total fit & population diagram?
 	 - reddening (None): E(B-V) estimate
-	 - gas_comps (None): how many gas components to use (if it's `None`, then pPXF just fits the gas)
+	 - gas_comps (None): how many gas components to use (if it's `None`, then pPXF just fits the stars; the first gas component is **always** bound to the stellar velocity field)
 	'''
 	import numpy as np
 	import matplotlib.pyplot as plt
@@ -847,7 +847,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			velScale = velscale, start = pp.sol[:2], goodpixels = goodPixels, clean = False, 
 			moments = n_moments, degree = 4, vsyst = dv, quiet = True,
 			reddening = reddening, lam = lam, bias = bias, 
-			oversample = oversample, regul = 100., reg_dim = reg_dim)
+			oversample = oversample, regul = 50., reg_dim = reg_dim)
 		print 'Second pass results'
 		print '\t', pp.sol
 		print '\tChi2/DOF =', pp.chi2
@@ -902,9 +902,9 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 
 		pp = ppxf(templates = all_templates, galaxy = galaxy/np.median(galaxy), noise = noise, 
 			velScale = velscale, start = start, goodpixels = goodPixels, clean = clean, 
-			plot = fit_plots, moments = moments, degree = 4, vsyst = dv, 
+			plot = fit_plots, moments = n_moments, degree = 4, vsyst = dv, 
 			reddening = reddening, lam = lam, bias = bias, quiet = quiet, 
-			oversample = oversample, regul = 100., reg_dim = reg_dim, component = component)	
+			oversample = oversample, regul = regul, reg_dim = reg_dim, component = component)	
 
 		print 'Final pass results'
 		if gas_comps > 0:
@@ -928,7 +928,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 		if fit_plots == True:
 			plt.fill_between(np.arange(0, len(noise)), (galaxy - noise)/np.median(galaxy), (galaxy + noise)/np.median(galaxy), edgecolor = 'green', facecolor = 'green', alpha = 0.5)
 
-			if gas_comps != None: 
+			if gas_comps not in (0, None): 
 				plt.plot(np.arange(0, len(noise)), gas + 0.15, c = 'b', linewidth = 2)
 
 			label_locs = np.arange(100.*np.floor(np.min(lam)/100.), 100.*np.ceil(np.max(lam)/100.), 200).astype(int)
@@ -1006,7 +1006,7 @@ def pPXF_make_derived_plots(objname):
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True)
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True)
 
-def pPXF_run_galaxy(objname, first_few = None, gas_comps = None):
+def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 	import ppxf
 	from astroML.datasets import fetch_sdss_spectrum
 	import warnings
@@ -1075,7 +1075,8 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None):
 			pp, ssps = SP_pPXF((ifu.T/np.median(ifu, axis = 1)).T, fiber = fiber, l_summ = (3907., 1.4, 1934), 
 				z = z + dz, verbose = False, noise_plots = False, fit_plots = True, save_fits = True, 
 				clean = True, quiet = True, age_lim = 13.5, n_moments = n_moments, 
-				bias = None, objname = objname, oversample = False, reddening = EBV, gas_comps = gas_comps)
+				bias = None, objname = objname, oversample = False, reddening = EBV, 
+				gas_comps = gas_comps, regul = regul)
 
 			fiber_Z = np.log10(np.average(10.**ssps['Z'], weights = ssps['fits']))
 			fiber_age = np.average(ssps['t'], weights = ssps['fits'])
@@ -1107,6 +1108,25 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None):
 			pass
 		fiberdata.write(objname + '/fiberfits.dat', format = 'ascii')
 		print 'Written to', objname + '/fiberfits.dat'
+
+def spider_diagram(obj, v_ctr, zp, ctr = [0., 0.], vcut = 500.):
+	'''
+	Use Voronoi binning (Cappellari et al.) to get the stellar velocity field
+	'''
+
+	import numpy as np
+	import matplotlib.pylplot as plt
+	import astropy.io.ascii as ascii
+
+	if type(obj) == str:
+		obj = ascii.read(obj) #accepts a reference to a file
+
+	fibers = obj #preserve original data table, for safety
+
+	#filter out sky fibers
+	fibers = fibers[fibers['row'] != -9999]
+	#filter out
+
 
 '''
 im, fiberflat = load_ifus_precorrection('NGC2558')
