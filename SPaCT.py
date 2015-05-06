@@ -545,7 +545,7 @@ def circles(x, y, s, c='b', ax=None, vmin=None, vmax=None, **kwargs):
 	return collection
 
 def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '', 
-	fibersize = 4.687, text = False, save = False):
+	fibersize = 4.687, text = False, save = False, offset = 0):
 	'''
 	fibers is an astropy table mostly in format of `fiberdata.dat`, 
 	with an additional row based on what is being plotted
@@ -571,7 +571,7 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '',
 	#print fibers
 	
 	if quantity != None:
-		cir = plotting_tools.circles(fibers['ra'], fibers['dec'], s = fibersize/2., c = fibers[quantity], alpha = 0.8, zorder = 2)
+		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., c = fibers[quantity] + offset, alpha = 0.8, zorder = 2)
 		cbar = fig.colorbar(cir, shrink=0.8)
 		cbar.set_label(quantity + qty_dets, size = 16)
 	else:
@@ -598,7 +598,8 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '',
 	else:
 		plt.show()
 
-def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', save = False):
+def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', 
+	save = False, offset = 0.):
 	import os
 	import numpy as np
 	import matplotlib.pyplot as plt
@@ -608,14 +609,15 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', save = Fal
 
 	plt.figure(figsize = (4, 4))
 	if 'd' + quantity in fibers.colnames:
-		plt.errorbar(fibers['r'], fibers[quantity], yerr = fibers['d' + quantity], fmt = 'x')
+		plt.errorbar(fibers['r'], fibers[quantity] + offset, yerr = fibers['d' + quantity], fmt = 'x')
 	else: 
-		plt.scatter(fibers['r'], fibers[quantity], marker = 'x')
+		plt.scatter(fibers['r'], fibers[quantity] + offset, marker = 'x')
 
 	if (quantity == 'V') or (quantity == 'sigma'):
 		yllim = np.max(np.insert(np.array(fibers[quantity]), 0, -1000.))
 		yulim = np.min(np.insert(np.array(fibers[quantity]), 0, 1000.))
-		plt.ylim([0.8*yllim, 1.2*yulim])
+		plt.ylim([0.8*yllim + offset, 1.2*yulim + offset])
+		plt.xlim([-5., 50.])
 	plt.ylabel(quantity + qty_dets, size = 16)
 	plt.xlabel('radius [arcsec]', size = 16)
 	plt.title(objname, fontsize = 18)
@@ -630,6 +632,40 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', save = Fal
 		plt.savefig(objname + '/' + quantity + 'grad.png')
 	else:
 		plt.show()
+
+def rebin(x,factor):
+    """
+    Rebin a one-dimensional vector by averaging
+    in groups of "factor" adjacent values
+
+    From Cappellari's ppxf_simulation_example.py
+
+    """
+    return np.mean(x.reshape(-1,factor),axis=1)
+
+def pPXF_MC(pp, lam):
+	'''
+	INCOMPLETE
+
+	Simulate pPXF result for a given fit, to better estimate kinematics errors
+
+	Fashioned after Cappellari et al's ppxf_simulation_example.py
+
+	A semi-optional step for after individual fiber fits, intended to better estimate the errors
+	
+	Arguments:
+	 - pp: ppxf object
+	 - lam: array of wavelengths (same as fed into pPXF earlier)
+
+	'''
+
+	import numpy as np
+	import ppxf_util as util
+	from scipy import ndimage, signal
+	import astropy.io.fits as fits
+
+	bestfit = pp.bestfit
+
 
 def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False, 
 	noise_plots = False, fit_plots = False, reddening = None, age_lim = 13.6, 
@@ -771,7 +807,9 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	    ssp = hdu[0].data
 	    ssp = ndimage.gaussian_filter1d(ssp,sigma)
 	    sspNew, logLam2, velscale = util.log_rebin(lamRange2, ssp, velscale=velscale)
-	    templates[:,j] = sspNew/np.median(sspNew) # Normalizes templates
+	    templates[:,j] = sspNew
+
+	templates /= np.median(templates) # Normalizes templates
 
 	# The galaxy and the template spectra do not have the same starting wavelength.
 	# For this reason an extra velocity shift DV has to be applied to the template
@@ -951,7 +989,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 
 			plt.imshow(weights, origin = 'lower', interpolation='nearest', cmap='gnuplot2',
 				aspect='auto', extent=(np.log10(np.min(ssps['t'])) - d_log_ages/2., np.log10(np.max(ssps['t'])) + d_log_ages/2., np.min(ssps['Z']) - dz/2., np.max(ssps['Z']) + dz/2.), 
-				vmin = 0.0, vmax = 1.0)
+				vmin = 0.0)
 			plt.colorbar()
 			plt.title("Mass Fraction", size = 16)
 			plt.xlabel("log$_{10}$ Age (Gyr)", size = 16)
@@ -987,23 +1025,24 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			except OSError:
 				pass
 		
+		print 'writing to ' + objname + '/' + str(fiber) + '.png'
 		plt.savefig(objname + '/' + str(fiber) + '.png')
 
 	return pp, ssps
 
-def pPXF_make_derived_plots(objname):
+def pPXF_make_derived_plots(objname, v_offset = 0.):
 	import astropy.io.ascii as ascii
 
 	fiberdata = ascii.read(objname + '/fiberfits.dat')
 
 	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 't', qty_dets = '[Gyr]', save = True)
 	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'Z', qty_dets = '[M/H]', save = True)
-	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True)
+	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True, offset = v_offset)
 	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True)
 
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 't', qty_dets = '[Gyr]', save = True)
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'Z', qty_dets = '[M/H]', save = True)
-	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True)
+	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True, offset = v_offset)
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True)
 
 def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
