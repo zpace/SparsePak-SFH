@@ -545,7 +545,8 @@ def circles(x, y, s, c='b', ax=None, vmin=None, vmax=None, **kwargs):
 	return collection
 
 def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '', 
-	fibersize = 4.687, text = False, save = False, offset = 0):
+	fibersize = 4.687, text = False, save = False, offset = 0., 
+	oe = 'even'):
 	'''
 	fibers is an astropy table mostly in format of `fiberdata.dat`, 
 	with an additional row based on what is being plotted
@@ -554,9 +555,12 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '',
 	import numpy as np
 	import matplotlib.pyplot as plt
 	import matplotlib.image as mpimg
+	import matplotlib as mpl
 	import plotting_tools
 
-	fig = plt.figure(figsize = (4, 4), dpi = 200)
+	plt.close('all')
+
+	fig = plt.figure(figsize = (4, 4), dpi = 300)
 
 	#you can get custom-sized images at http://skyserver.sdss3.org/dr10/en/tools/chart/image.aspx
 	#explore at http://skyserver.sdss3.org/dr10/en/tools/explore/default.aspx
@@ -568,14 +572,43 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '',
 
 	fibers = fibers[fibers['sky'] != 1]
 	fibers = fibers[np.isnan(fibers[quantity]) == False]
+	fibers[quantity] += offset
 	#print fibers
-	
-	if quantity != None:
-		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., c = fibers[quantity] + offset, alpha = 0.8, zorder = 2)
-		cbar = fig.colorbar(cir, shrink=0.8)
-		cbar.set_label(quantity + qty_dets, size = 16)
+
+	#set up cmap based on whether the quantity is even or odd
+	#if odd, then it enforces symmetry around `offset` values
+	if oe == 'odd':
+		cmap = mpl.cm.get_cmap('RdBu_r')
 	else:
-		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., edgecolor = 'None', alpha = 0.8, zorder = 2)
+		cmap = 'cubehelix_r'
+	
+	if (quantity != None) and (quantity not in ['Z', 't']):
+		if quantity == 'V':
+			cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., 
+				c = fibers[quantity], alpha = 0.8, zorder = 2, 
+				cmap = cmap, vmin = -300., vmax = 300.)
+		elif quantity == 'sigma':
+			cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., 
+				c = fibers[quantity], alpha = 0.8, zorder = 2, 
+				cmap = cmap, vmin = 0.0, vmax = 300.)
+		else:
+			cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., 
+				c = fibers[quantity], alpha = 0.8, zorder = 2, 
+				cmap = cmap)
+		cbar = fig.colorbar(cir, shrink=0.8)
+		cbar.set_label(quantity + qty_dets, size = 12)
+		if quantity == 'V': cbar.cmap.set_over('r'); cbar.cmap.set_under('b');
+		elif oe == 'even': cbar.cmap.set_over('k'); cbar.cmap.set_under('w');
+
+	elif quantity in ['Z', 't']: #since these are percentile bounds
+		q = fibers[quantity]
+		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., 
+			c = q, alpha = 0.8, zorder = 2, cmap = cmap)
+		cbar = fig.colorbar(cir, shrink=0.8)
+		cbar.set_label(quantity + qty_dets, size = 12)
+	else:
+		cir = circles(fibers['ra'], fibers['dec'], s = fibersize/2., 
+			edgecolor = 'None', alpha = 0.8, zorder = 2)
 
 	if text == True:
 		for row in fibers:
@@ -583,10 +616,12 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '',
 				plt.text(row['ra']-1., row['dec']-1.75, s = str(row['fiber']) + '\n' + str(row['row']), color = 'g', size = 14, zorder = 3)
 
 	plt.xlim([-40, 40])
+	plt.xticks([-40., -20., 0., 20., 40.])
 	plt.ylim([-40, 40])
-	plt.xlabel('RA offset (arcsec)', fontsize = 16)
-	plt.ylabel('Dec offset (arcsec)', fontsize = 16)
-	plt.title(objname, fontsize = 18)
+	plt.yticks([-40., -20., 0., 20., 40.])
+	plt.xlabel('RA offset [arcsec]', fontsize = 12)
+	plt.ylabel('Dec offset [arcsec]', fontsize = 12)
+	plt.title(objname, fontsize = 14)
 	plt.tight_layout()
 
 	if (save == True) and (quantity != None):
@@ -604,20 +639,28 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '',
 	import numpy as np
 	import matplotlib.pyplot as plt
 
+	plt.close('all')
+	plt.figure(figsize = (4, 4), dpi = 200)
+
 	fibers = fibers[fibers['sky'] != 1]
 	fibers = fibers[np.isnan(fibers[quantity]) == False]
 
-	plt.figure(figsize = (4, 4))
-	if 'd' + quantity in fibers.colnames:
-		plt.errorbar(fibers['r'], fibers[quantity] + offset, yerr = fibers['d' + quantity], fmt = 'x')
-	else: 
-		plt.scatter(fibers['r'], fibers[quantity] + offset, marker = 'x')
-
 	if (quantity == 'V') or (quantity == 'sigma'):
+		plt.errorbar(fibers['r'], fibers[quantity] + offset, 
+			yerr = fibers['d' + quantity], fmt = 'x')
 		yllim = np.max(np.insert(np.array(fibers[quantity]), 0, -1000.))
 		yulim = np.min(np.insert(np.array(fibers[quantity]), 0, 1000.))
 		plt.ylim([0.8*yllim + offset, 1.2*yulim + offset])
 		plt.xlim([-5., 50.])
+	elif (quantity == 'Z') or (quantity == 't'):
+		q_14 = fibers[quantity + '14']
+		q_50 = fibers[quantity]
+		q_86 = fibers[quantity + '86']
+		plt.errorbar(fibers['r'], q_50, 
+			yerr = np.column_stack((np.abs(q_50 - q_14), np.abs(q_50 - q_86))).T,
+			fmt = 'x', alpha = 0.5)
+	else: 
+		print 'ERROR: UNKNOWN QUANTITY... PLOT WILL BE BLANK'
 	plt.ylabel(quantity + qty_dets, size = 16)
 	plt.xlabel('radius [arcsec]', size = 16)
 	plt.title(objname, fontsize = 18)
@@ -647,11 +690,10 @@ def pPXF_MC(pp, lam):
 	'''
 	INCOMPLETE
 
-	Simulate pPXF result for a given fit, to better estimate kinematics errors
+	A semi-optional step, post-fitting, to simulate pPXF result for a 
+	given fit, to better estimate kinematics errors
 
 	Fashioned after Cappellari et al's ppxf_simulation_example.py
-
-	A semi-optional step for after individual fiber fits, intended to better estimate the errors
 	
 	Arguments:
 	 - pp: ppxf object
@@ -885,10 +927,12 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			velScale = velscale, start = pp.sol[:2], goodpixels = goodPixels, clean = False, 
 			moments = n_moments, degree = 4, vsyst = dv, quiet = True,
 			reddening = reddening, lam = lam, bias = bias, 
-			oversample = oversample, regul = 50., reg_dim = reg_dim)
+			oversample = oversample, regul = regul, reg_dim = reg_dim)
 		print 'Second pass results'
 		print '\t', pp.sol
 		print '\tChi2/DOF =', pp.chi2
+
+		#print np.mean(np.abs(pp.bestfit - galaxy/np.median(galaxy)))
 
 		print 'rescaling by', pp.chi2
 
@@ -992,8 +1036,8 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 				vmin = 0.0)
 			plt.colorbar()
 			plt.title("Mass Fraction", size = 16)
-			plt.xlabel("log$_{10}$ Age (Gyr)", size = 16)
-			plt.ylabel("[M/H]", size = 16)
+			plt.xlabel(r'$\log_{10} \tau ~ [\mathrm{Gyr}]$', size = 16)
+			plt.ylabel(r'$[M/H]$', size = 16)
 			plt.tick_params(axis = 'y', which = 'major', labelsize = 16)
 			plt.tick_params(axis = 'x', which = 'major', labelsize = 16)
 			#plt.gca().set_yticks(np.unique(ssps['Z']))
@@ -1037,7 +1081,7 @@ def pPXF_make_derived_plots(objname, v_offset = 0.):
 
 	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 't', qty_dets = '[Gyr]', save = True)
 	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'Z', qty_dets = '[M/H]', save = True)
-	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True, offset = v_offset)
+	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True, offset = v_offset, oe = 'odd')
 	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True)
 
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 't', qty_dets = '[Gyr]', save = True)
@@ -1055,12 +1099,11 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 	import astropy.table as table
 	import numpy as np
 	import os
+	from plotting_tools import rejection_sample_2d
 
 	warnings.filterwarnings('ignore', message = "Polyfit may be poorly conditioned")
 	warnings.filterwarnings("ignore", message = "using a non-integer number instead of an integer will result in an error in the future")
 
-	#plt.rc('text', usetex = True)
-	plt.rc('font', family = 'serif')
 	plt.rcParams['figure.figsize'] = 16, 12
 
 	objects = {
@@ -1094,7 +1137,13 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 	dz, ifu_corr, corr_poly = sdss_cal(im, fiberflat, sdss, dz = 0., z = z, verbose = False, blur = 75, full_output = True)
 	write_corr_frame(ifu_corr, im, z, dz, objname, verbose = False)
 
+	fiberdata.add_column(table.Column(name = 'Z14', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 'Z50', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 'Z86', data = np.nan*np.ones(len(fiberdata['row']))))
 	fiberdata.add_column(table.Column(name = 'Z', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 't14', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 't50', data = np.nan*np.ones(len(fiberdata['row']))))
+	fiberdata.add_column(table.Column(name = 't86', data = np.nan*np.ones(len(fiberdata['row']))))
 	fiberdata.add_column(table.Column(name = 't', data = np.nan*np.ones(len(fiberdata['row']))))
 	fiberdata.add_column(table.Column(name = 'V', data = np.nan*np.ones(len(fiberdata['row']))))
 	fiberdata.add_column(table.Column(name = 'sigma', data = np.nan*np.ones(len(fiberdata['row']))))
@@ -1117,15 +1166,39 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 				bias = None, objname = objname, oversample = False, reddening = EBV, 
 				gas_comps = gas_comps, regul = regul)
 
-			fiber_Z = np.log10(np.average(10.**ssps['Z'], weights = ssps['fits']))
-			fiber_age = np.average(ssps['t'], weights = ssps['fits'])
+			Zs, ts = np.unique(ssps['Z']), np.unique(ssps['t']) #all possible Z and t values
+			#Zs are in axis 0, ts in axis 1
+
+			#print pp.weights.shape, len(Zs), len(ts)
+
+			pop_samples = rejection_sample_2d(Zs, ts, pp.weights.reshape(len(Zs), len(ts))) #no need to normalize here
+			Z_marg = pp.weights.reshape(len(Zs), len(ts)).sum(axis = 1)
+			t_marg = pp.weights.reshape(len(Zs), len(ts)).sum(axis = 0)
+			Z_samples = pop_samples[:,0]
+			t_samples = pop_samples[:,1]
+
+			fiber_Z = np.array(np.percentile(Z_samples, [16., 50., 84.]))
+			fiber_t = np.array(np.percentile(t_samples, [16., 50., 84.]))
+			
+			fiber_Z_avg = np.log10(np.average(10.**ssps['Z'], weights = ssps['fits']))
+			fiber_age_avg = np.average(ssps['t'], weights = ssps['fits'])
 			fiber_V = pp.sol[0]
 			fiber_sigma = pp.sol[1]
 			fiber_V_err = pp.error[0]
 			fiber_sigma_err = pp.error[1]
 
-			fiberdata['Z'][np.where(fiberdata['row'] == fiber)] = fiber_Z
-			fiberdata['t'][np.where(fiberdata['row'] == fiber)] = fiber_age
+			#fiberdata['Z'] and ['t'] have 16th, 50th, and 84th percentiles
+
+			fiberdata['Z14'][np.where(fiberdata['row'] == fiber)] = fiber_Z[0]
+			fiberdata['Z50'][np.where(fiberdata['row'] == fiber)] = fiber_Z[1]
+			fiberdata['Z86'][np.where(fiberdata['row'] == fiber)] = fiber_Z[2]
+			fiberdata['Z'][np.where(fiberdata['row'] == fiber)] = fiber_Z_avg
+
+			fiberdata['t14'][np.where(fiberdata['row'] == fiber)] = fiber_t[0]
+			fiberdata['t50'][np.where(fiberdata['row'] == fiber)] = fiber_t[1]
+			fiberdata['t86'][np.where(fiberdata['row'] == fiber)] = fiber_t[2]
+			fiberdata['t'][np.where(fiberdata['row'] == fiber)] = fiber_age_avg
+
 			fiberdata['V'][np.where(fiberdata['row'] == fiber)] = fiber_V
 			fiberdata['sigma'][np.where(fiberdata['row'] == fiber)] = fiber_sigma
 			fiberdata['dV'][np.where(fiberdata['row'] == fiber)] = fiber_V_err
@@ -1147,24 +1220,6 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 			pass
 		fiberdata.write(objname + '/fiberfits.dat', format = 'ascii')
 		print 'Written to', objname + '/fiberfits.dat'
-
-def spider_diagram(obj, v_ctr, zp, ctr = [0., 0.], vcut = 500.):
-	'''
-	Use Voronoi binning (Cappellari et al.) to get the stellar velocity field
-	'''
-
-	import numpy as np
-	import matplotlib.pylplot as plt
-	import astropy.io.ascii as ascii
-
-	if type(obj) == str:
-		obj = ascii.read(obj) #accepts a reference to a file
-
-	fibers = obj #preserve original data table, for safety
-
-	#filter out sky fibers
-	fibers = fibers[fibers['row'] != -9999]
-	#filter out
 
 
 '''
