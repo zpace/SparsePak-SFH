@@ -634,23 +634,25 @@ def gal_im_fiber_plot(objname, fibers, quantity = None, qty_dets = '',
 		plt.show()
 
 def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '', 
-	save = False, offset = 0.):
+	save = False, offset = 0., fit = None):
 	import os
 	import numpy as np
 	import matplotlib.pyplot as plt
+	import fitting_tools
 
 	plt.close('all')
 	plt.figure(figsize = (4, 4), dpi = 200)
 
 	fibers = fibers[fibers['sky'] != 1]
 	fibers = fibers[np.isnan(fibers[quantity]) == False]
+	fibers[quantity] += offset
 
 	if (quantity == 'V') or (quantity == 'sigma'):
-		plt.errorbar(fibers['r'], fibers[quantity] + offset, 
-			yerr = fibers['d' + quantity], fmt = 'x')
-		yllim = np.max(np.insert(np.array(fibers[quantity]), 0, -1000.))
-		yulim = np.min(np.insert(np.array(fibers[quantity]), 0, 1000.))
-		plt.ylim([0.8*yllim + offset, 1.2*yulim + offset])
+		plt.errorbar(fibers['r'], fibers[quantity], 
+			yerr = fibers['d' + quantity], fmt = 'x', alpha = 0.5)
+		yllim = np.min(np.insert(np.array(fibers[quantity]), 0, -1000.))
+		yulim = np.max(np.insert(np.array(fibers[quantity]), 0, 1000.))
+		plt.ylim([0.8*yllim, 1.2*yulim])
 		plt.xlim([-5., 50.])
 	elif (quantity == 'Z') or (quantity == 't'):
 		q_14 = fibers[quantity + '14']
@@ -661,6 +663,27 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '',
 			fmt = 'x', alpha = 0.5)
 	else: 
 		print 'ERROR: UNKNOWN QUANTITY... PLOT WILL BE BLANK'
+
+	if fit:
+		if (quantity == 'V') or (quantity == 'sigma'):
+			dq = fibers['d' + quantity]
+			dq[dq == 0.] = np.min(dq[dq != 0.])
+		else:
+			dq = 0.5*(q_86 - q_14)
+		
+		popt, pcov = fitting_tools.linear_fit(fibers['r'], fibers[quantity], sigma = dq)
+
+		m, b = popt[0], popt[1]
+		if type(pcov) == np.ndarray:
+			dm, db = np.sqrt(np.diagonal(pcov)[0]), np.sqrt(np.diagonal(pcov)[1])
+
+			x_display = np.linspace(fibers['r'].min(), fibers['r'].max(), 10)
+			y_display = fitting_tools.linear(x_display, m, b)
+			line_label = r'$m={0:.2f} \pm {1:.2f}$; $b={2:.2f} \pm {3:.2f}$'.format(m, dm, b, db)
+			plt.plot(x_display, y_display, linestyle = '--', c = 'k', alpha = 0.75, 
+				label = line_label)
+			plt.legend(loc = 'best', prop={'size': 8})
+
 	plt.ylabel(quantity + qty_dets, size = 16)
 	plt.xlabel('radius [arcsec]', size = 16)
 	plt.title(objname, fontsize = 18)
@@ -862,7 +885,9 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	# wavelength to the rest frame before using the line below (see above).
 
 	c = 299792.458
-	dv = (logLam2[0]-logLam1[0])*c # km/s
+	dl = np.exp(logLam2[0])-np.exp(logLam1[0])
+	dv = c*(logLam2[0] - logLam1[0]) # km/s
+	print dl, dv
 	#print 'dv:', dv, 'km/s'
 
 	vel = 0.
@@ -878,7 +903,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 	# Here the actual fit starts. The best fit is plotted on the screen.
 	# Gas emission lines are excluded from the pPXF fit using the GOODPIXELS keyword.
 
-	start = [vel, 3.*velscale] # (km/s), starting guess for [V,sigma]
+	start = [vel, 2.5*velscale] # (km/s), starting guess for [V,sigma]
 
 	t = clock()
 
@@ -1084,10 +1109,10 @@ def pPXF_make_derived_plots(objname, v_offset = 0.):
 	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True, offset = v_offset, oe = 'odd')
 	gal_im_fiber_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True)
 
-	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 't', qty_dets = '[Gyr]', save = True)
-	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'Z', qty_dets = '[M/H]', save = True)
+	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 't', qty_dets = '[Gyr]', save = True, fit = True)
+	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'Z', qty_dets = '[M/H]', save = True, fit = True)
 	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'V', qty_dets = '[km/s]', save = True, offset = v_offset)
-	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True)
+	gal_rad_dep_plot(objname = objname, fibers = fiberdata, quantity = 'sigma', qty_dets = '[km/s]', save = True, fit = True)
 
 def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 	import ppxf
@@ -1159,6 +1184,7 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 		n_moments = 2
 
 		ifu = fits.open(objname + '_fluxcal.fits')[0].data
+
 		try:
 			pp, ssps = SP_pPXF((ifu.T/np.median(ifu, axis = 1)).T, fiber = fiber, l_summ = (3907., 1.4, 1934), 
 				z = z + dz, verbose = False, noise_plots = False, fit_plots = True, save_fits = True, 
