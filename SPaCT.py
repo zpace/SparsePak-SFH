@@ -653,23 +653,20 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '',
 		yllim = np.min(np.insert(np.array(fibers[quantity]), 0, -1000.))
 		yulim = np.max(np.insert(np.array(fibers[quantity]), 0, 1000.))
 		plt.ylim([0.8*yllim, 1.2*yulim])
-		plt.xlim([-5., 50.])
 	elif (quantity == 'Z') or (quantity == 't'):
-		q_14 = fibers[quantity + '14']
-		q_50 = fibers[quantity]
-		q_86 = fibers[quantity + '86']
-		plt.errorbar(fibers['r'], q_50, 
-			yerr = np.column_stack((np.abs(q_50 - q_14), np.abs(q_50 - q_86))).T,
-			fmt = 'x', alpha = 0.5)
+		plt.scatter(fibers['r'], fibers[quantity], 
+			marker = 'x', alpha = 0.5)
 	else: 
 		print 'ERROR: UNKNOWN QUANTITY... PLOT WILL BE BLANK'
+
+	plt.xlim([-5., 50.])
 
 	if fit:
 		if (quantity == 'V') or (quantity == 'sigma'):
 			dq = fibers['d' + quantity]
 			dq[dq == 0.] = np.min(dq[dq != 0.])
 		else:
-			dq = 0.5*(q_86 - q_14)
+			dq = None
 		
 		popt, pcov = fitting_tools.linear_fit(fibers['r'], fibers[quantity], sigma = dq)
 
@@ -679,7 +676,7 @@ def gal_rad_dep_plot(objname, fibers, quantity = None, qty_dets = '',
 
 			x_display = np.linspace(fibers['r'].min(), fibers['r'].max(), 10)
 			y_display = fitting_tools.linear(x_display, m, b)
-			line_label = r'$m={0:.2f} \pm {1:.2f}$; $b={2:.2f} \pm {3:.2f}$'.format(m, dm, b, db)
+			line_label = r'$m={0:.3f} \pm {1:.3f}$; $b={2:.2f} \pm {3:.2f}$'.format(m, dm, b, db)
 			plt.plot(x_display, y_display, linestyle = '--', c = 'k', alpha = 0.75, 
 				label = line_label)
 			plt.legend(loc = 'best', prop={'size': 8})
@@ -1033,12 +1030,15 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 		#print 'Third pass successful'
 		
 		if fit_plots == True:
-			plt.fill_between(np.arange(0, len(noise)), (galaxy - noise)/np.median(galaxy), (galaxy + noise)/np.median(galaxy), edgecolor = 'green', facecolor = 'green', alpha = 0.5)
+			plt.fill_between(np.arange(0, len(noise)), (galaxy - noise)/np.median(galaxy), 
+				(galaxy + noise)/np.median(galaxy), edgecolor = '#ff5f00', 
+				facecolor = 'coral', alpha = 0.5)
 
 			if gas_comps not in (0, None): 
 				plt.plot(np.arange(0, len(noise)), gas + 0.15, c = 'b', linewidth = 2)
 
-			label_locs = np.arange(100.*np.floor(np.min(lam)/100.), 100.*np.ceil(np.max(lam)/100.), 200).astype(int)
+			label_locs = np.arange(100.*np.floor(np.min(lam)/100.), 
+				100.*np.ceil(np.max(lam)/100.), 200).astype(int)
 			plt.xticks(lin_remap( label_locs, (lam[0], lam[-1]), (0, len(lam)) ), label_locs)
 			plt.xlabel('$\lambda[\AA]$', size = 16)
 			
@@ -1056,9 +1056,10 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set = 'MILES', verbose = False,
 			weights /= weights.sum()
 			#print weights
 
-			plt.imshow(weights, origin = 'lower', interpolation='nearest', cmap='gnuplot2',
-				aspect='auto', extent=(np.log10(np.min(ssps['t'])) - d_log_ages/2., np.log10(np.max(ssps['t'])) + d_log_ages/2., np.min(ssps['Z']) - dz/2., np.max(ssps['Z']) + dz/2.), 
-				vmin = 0.0)
+			plt.imshow(weights, origin = 'lower', interpolation='nearest', cmap='cubehelix_r',
+				aspect='auto', extent=(np.log10(np.min(ssps['t'])) - d_log_ages/2., 
+				np.log10(np.max(ssps['t'])) + d_log_ages/2., np.min(ssps['Z']) - dz/2., 
+				np.max(ssps['Z']) + dz/2.), vmin = 0.0)
 			plt.colorbar()
 			plt.title("Mass Fraction", size = 16)
 			plt.xlabel(r'$\log_{10} \tau ~ [\mathrm{Gyr}]$', size = 16)
@@ -1162,13 +1163,7 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 	dz, ifu_corr, corr_poly = sdss_cal(im, fiberflat, sdss, dz = 0., z = z, verbose = False, blur = 75, full_output = True)
 	write_corr_frame(ifu_corr, im, z, dz, objname, verbose = False)
 
-	fiberdata.add_column(table.Column(name = 'Z14', data = np.nan*np.ones(len(fiberdata['row']))))
-	fiberdata.add_column(table.Column(name = 'Z50', data = np.nan*np.ones(len(fiberdata['row']))))
-	fiberdata.add_column(table.Column(name = 'Z86', data = np.nan*np.ones(len(fiberdata['row']))))
 	fiberdata.add_column(table.Column(name = 'Z', data = np.nan*np.ones(len(fiberdata['row']))))
-	fiberdata.add_column(table.Column(name = 't14', data = np.nan*np.ones(len(fiberdata['row']))))
-	fiberdata.add_column(table.Column(name = 't50', data = np.nan*np.ones(len(fiberdata['row']))))
-	fiberdata.add_column(table.Column(name = 't86', data = np.nan*np.ones(len(fiberdata['row']))))
 	fiberdata.add_column(table.Column(name = 't', data = np.nan*np.ones(len(fiberdata['row']))))
 	fiberdata.add_column(table.Column(name = 'V', data = np.nan*np.ones(len(fiberdata['row']))))
 	fiberdata.add_column(table.Column(name = 'sigma', data = np.nan*np.ones(len(fiberdata['row']))))
@@ -1215,14 +1210,7 @@ def pPXF_run_galaxy(objname, first_few = None, gas_comps = None, regul = 100.):
 
 			#fiberdata['Z'] and ['t'] have 16th, 50th, and 84th percentiles
 
-			fiberdata['Z14'][np.where(fiberdata['row'] == fiber)] = fiber_Z[0]
-			fiberdata['Z50'][np.where(fiberdata['row'] == fiber)] = fiber_Z[1]
-			fiberdata['Z86'][np.where(fiberdata['row'] == fiber)] = fiber_Z[2]
 			fiberdata['Z'][np.where(fiberdata['row'] == fiber)] = fiber_Z_avg
-
-			fiberdata['t14'][np.where(fiberdata['row'] == fiber)] = fiber_t[0]
-			fiberdata['t50'][np.where(fiberdata['row'] == fiber)] = fiber_t[1]
-			fiberdata['t86'][np.where(fiberdata['row'] == fiber)] = fiber_t[2]
 			fiberdata['t'][np.where(fiberdata['row'] == fiber)] = fiber_age_avg
 
 			fiberdata['V'][np.where(fiberdata['row'] == fiber)] = fiber_V
