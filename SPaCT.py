@@ -128,7 +128,7 @@ def interp_corr(im, fiberflat, verbose=False, full=False):
         print np.shape(fiberflat[0].data)
 
         # display the un-corrected fiberflat
-        #fig = plt.figure(figsize=(10,20))
+        # fig = plt.figure(figsize=(10,20))
         from matplotlib.colors import LogNorm
         plt.imshow(fiberflat[0].data, aspect=20,
                    origin='lower', interpolation='None', cmap='binary')
@@ -654,7 +654,7 @@ def circles(x, y, s, c='b', ax=None, vmin=None, vmax=None, **kwargs):
     from matplotlib.collections import PatchCollection
     import pylab as plt
     import numpy as np
-    #import matplotlib.colors as colors
+    # import matplotlib.colors as colors
 
     if ax is None:
         ax = plt.gca()
@@ -1079,7 +1079,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
     t = clock()
 
     log_ages = np.log10(ssps['t'])
-    d_log_ages = np.mean(log_ages[1:] - log_ages[:-1])
+    d_log_ages = log_ages[1] - log_ages[0]
     dz = np.abs(np.mean(ssps['Z'][1:] - ssps['Z'][:-1]))
 
     # now reshape the templates according to the number of Z and t values
@@ -1095,12 +1095,14 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
     # print reg_dim
 
     templates = templates.reshape(templates.shape[0], -1)
+    templates /= np.median(templates)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=DeprecationWarning)
 
         if fit_plots == True:
-            plt.figure(figsize=(8, 6))
+            plt.close('all')
+            fig = plt.figure(figsize=(8, 6))
             plt.subplot(211)
 
         lam = np.exp(logLam1)
@@ -1112,7 +1114,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         pp = ppxf(templates=templates, galaxy=galaxy/np.median(galaxy),
                   noise=galaxy*0.+1., velScale=velscale, start=start,
                   goodpixels=goodPixels, plot=False, moments=n_moments,
-                  degree=4, vsyst=dv, reddening=reddening,
+                  vsyst=dv, reddening=reddening,
                   lam=lam, quiet=True)
         # print 'First pass successful'
         print 'First pass results'
@@ -1126,7 +1128,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         pp = ppxf(templates=templates, galaxy=galaxy/np.median(galaxy),
                   noise=noise, velScale=velscale,
                   start=pp.sol[:2], goodpixels=goodPixels, clean=False,
-                  moments=n_moments, degree=4, vsyst=dv, quiet=True,
+                  moments=n_moments, vsyst=dv, quiet=True,
                   reddening=reddening, lam=lam, bias=bias,
                   oversample=oversample, regul=regul, reg_dim=reg_dim)
         print 'Second pass results'
@@ -1190,35 +1192,40 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         pp = ppxf(templates=all_templates, galaxy=galaxy/np.median(galaxy),
                   noise=noise, velScale=velscale, start=start,
                   goodpixels=goodPixels, clean=clean, plot=fit_plots,
-                  moments=n_moments, degree=4, vsyst=dv, reddening=reddening,
+                  moments=n_moments, vsyst=dv, reddening=reddening,
                   lam=lam, bias=bias, quiet=quiet, oversample=oversample,
                   regul=regul, reg_dim=reg_dim, component=component)
 
         print 'Final pass results'
         if gas_comps > 0:
             print '\t', pp.sol[0]
+            # shift lam slightly, based on sol
+            #(similar statement for gas-less case is in else statement)
+            lam *= (1. + z) / (1. + z + pp.sol[0][0]/c)
         else:
             print '\t', pp.sol
+            lam *= (1. + z) / (1. + z + pp.sol[0]/c)
         print '\tChi2/DOF =', pp.chi2
 
         if gas_comps not in (0, None):
             for i in range(1, gas_comps + 1):
-                gas = pp.matrix[
-                    :, -nGas_templates:].dot(pp.weights[-nGas_templates:])
+                gas = pp.matrix[:, -nGas_templates:].dot(
+                    pp.weights[-nGas_templates:])
                 # Extract weights of gas emissions
                 w = np.where(np.array(component) == gas_comps)[0]
                 print 'Gas component', i
                 print '\t', pp.sol[i][:2]
                 print 'Emission lines peak intensity:'
-                for name, weight, line in zip(line_names, pp.weights[w],
-                                              pp.matrix[:, w].T):
+                for name, weight, line in zip(
+                        line_names, pp.weights[w], pp.matrix[:, w].T):
                     print('\t %12s: %.3g' % (name, weight*np.max(line)))
 
         # print 'Third pass successful'
 
         if fit_plots == True:
             plt.fill_between(
-                np.arange(0, len(noise)), (galaxy - noise)/np.median(galaxy),
+                np.arange(0, len(noise)),
+                (galaxy - noise)/np.median(galaxy),
                 (galaxy + noise)/np.median(galaxy), edgecolor='#ff5f00',
                 facecolor='coral', alpha=0.5)
 
@@ -1233,42 +1240,41 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
                 lin_remap(
                     label_locs, (lam[0], lam[-1]), (0, len(lam))),
                 label_locs)
-            plt.xlabel('$\lambda[\AA]$', size=16)
+            plt.xlabel('$\lambda_{rest}[\AA]$', size=16)
 
             plt.tick_params(axis='both', which='major', labelsize=12)
             plt.subplots_adjust(top=0.8)
 
-            plt.subplot(212)
+            ax2 = plt.subplot(212)
             # print s
 
             # make a weights array for display, s.t. # rows = # Z vals
             # and # cols = # age vals
 
             # extract the kinematics of the stars first
-            weights = np.reshape(pp.weights[:nStar_templates], (len(
-                np.unique(ssps['Z'])), len(np.unique(ssps['t']))))
+            weights = np.reshape(
+                pp.weights[:nStar_templates],
+                (len(np.unique(ssps['Z'])), len(np.unique(ssps['t']))))
             weights /= weights.sum()
             # print weights
 
             plt.imshow(
                 weights, origin='lower', interpolation='nearest',
                 cmap='cubehelix_r',
-                extent=(
+                vmin=0.0, extent=(
                     np.log10(np.min(ssps['t'])) - d_log_ages/2.,
                     np.log10(np.max(ssps['t'])) + d_log_ages/2.,
                     np.min(ssps['Z']) - dz/2.,
-                    np.max(ssps['Z']) + dz/2.), vmin=0.0)
+                    np.max(ssps['Z']) + dz/2.))
+
             plt.colorbar()
             plt.title("Mass Fraction", size=16)
             plt.xlabel(r'$\log_{10} \tau ~ [\mathrm{Gyr}]$', size=16)
             plt.ylabel(r'$[M/H]$', size=16)
-            plt.tick_params(axis='y', which='major', labelsize=16)
-            plt.tick_params(axis='x', which='major', labelsize=16)
-            # plt.gca().set_yticks(np.unique(ssps['Z']))
-            plt.gca().set_xticks(np.linspace(0., 1.1, 12))
 
-            plt.suptitle(objname + ' pPXF fit: fiber ' + str(fiber),
-                         size=18)
+            plt.suptitle(
+                objname + ' pPXF fit: fiber ' + str(fiber),
+                size=18)
             plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
         '''
@@ -1283,7 +1289,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
 
     ssps.add_column(Column(name='fits', data=pp.weights[:nStar_templates]))
 
-    #ssps.pprint(max_lines = -1)
+    # ssps.pprint(max_lines = -1)
     # print ssps#[ssps['fits'] != 0.]
 
     if fit_plots == True:
@@ -1295,8 +1301,8 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             except OSError:
                 pass
 
-        print 'writing to ' + objname + '/' + str(fiber) + '.png'
-        plt.savefig(objname + '/' + str(fiber) + '.png')
+                print 'writing to ' + objname + '/' + str(fiber) + '.png'
+                plt.savefig(objname + '/' + str(fiber) + '.png')
 
     return pp, ssps
 
@@ -1420,11 +1426,16 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
 
         ifu = fits.open(objname + '_fluxcal.fits')[0].data
 
+        if first_few == 1:
+            save_fits = False
+        else:
+            save_fits = True
+
         try:
             pp, ssps = SP_pPXF(
                 (ifu.T/np.median(ifu, axis=1)).T, fiber=fiber,
                 l_summ=(3907., 1.4, 1934), z=z + dz, verbose=False,
-                noise_plots=False, fit_plots=True, save_fits=True,
+                noise_plots=False, fit_plots=True, save_fits=save_fits,
                 clean=True, quiet=True, age_lim=13.5, n_moments=n_moments,
                 bias=None, objname=objname, oversample=False, reddening=EBV,
                 gas_comps=gas_comps, regul=regul)
@@ -1492,15 +1503,15 @@ mjd = 53321
 fiber = 290
 sdss = fetch_sdss_spectrum(plate, mjd, fiber)
 
-#z_test(im, fiberflat, sdss, fiber = 47, dz = .00925)
-#z_test(im, fiberflat, sdss, fiber = 27, dz = 0.01)
-#z_test(im, fiberflat, sdss, fiber = 60, dz = .00925)
-#z_test(im, fiberflat, sdss, fiber = 38, dz = .00925)
-#z_test(im, fiberflat, sdss, fiber = 42, dz = .00925)
-#z_test(im, fiberflat, sdss, fiber = 22, dz = .00925)
-#z_test(im, fiberflat, sdss, fiber = 41, dz = .00925)
+# z_test(im, fiberflat, sdss, fiber = 47, dz = .00925)
+# z_test(im, fiberflat, sdss, fiber = 27, dz = 0.01)
+# z_test(im, fiberflat, sdss, fiber = 60, dz = .00925)
+# z_test(im, fiberflat, sdss, fiber = 38, dz = .00925)
+# z_test(im, fiberflat, sdss, fiber = 42, dz = .00925)
+# z_test(im, fiberflat, sdss, fiber = 22, dz = .00925)
+# z_test(im, fiberflat, sdss, fiber = 41, dz = .00925)
 z_test(im, fiberflat, sdss, fiber = 47, dz = .0000)
 
 dz, ifu_corr = sdss_cal(im, fiberflat, sdss, dz = 0., verbose = True)
-#write_corr_frame(ifu_corr, im, .017, dz, 'NGC2558')
+# write_corr_frame(ifu_corr, im, .017, dz, 'NGC2558')
 '''
