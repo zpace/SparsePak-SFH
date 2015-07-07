@@ -927,13 +927,17 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
     import os
 
     CRVAL1, CDELT1, NAXIS1 = l_summ
-    lamRange1 = np.array([CRVAL1, CRVAL1 + CDELT1 * NAXIS1])
+    lamRange1 = np.array([CRVAL1, CRVAL1 + CDELT1 * (NAXIS1 - 1)])
     FWHM_gal = 4.877  # FWHM from SparsePak simulator
 
-    lamRange1 = lamRange1 / (1 + z)
+    lamRange1 = lamRange1
     FWHM_gal = FWHM_gal / (1 + z)
 
+    print z
+
     galaxy, logLam1, velscale = util.log_rebin(lamRange1, ifu[fiber])
+    logLam1 -= z
+    lamRange1 = np.array([np.exp(logLam1[0]), np.exp(logLam1[-1])])
 
     # keep track of which pixels are negative, to mask them out later
     negative_pixels = np.where(galaxy < 0.)[0]
@@ -1255,7 +1259,8 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             weights = np.reshape(
                 pp.weights[:nStar_templates],
                 (len(np.unique(ssps['Z'])), len(np.unique(ssps['t']))))
-            weights /= weights.sum()
+            if weights.sum() > 0.:
+                weights /= weights.sum()
             # print weights
 
             plt.imshow(
@@ -1425,6 +1430,10 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         n_moments = 2
 
         ifu = fits.open(objname + '_fluxcal.fits')[0].data
+        h = fits.open(objname + '_fluxcal.fits')[0].header
+        NAXIS1 = h['NAXIS1']
+        CRVAL1 = h['CRVAL1']
+        CDELT1 = h['CDELT1']
 
         if first_few == 1:
             save_fits = False
@@ -1434,7 +1443,7 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         try:
             pp, ssps = SP_pPXF(
                 (ifu.T/np.median(ifu, axis=1)).T, fiber=fiber,
-                l_summ=(3907., 1.4, 1934), z=z + dz, verbose=False,
+                l_summ=(CRVAL1, CDELT1, NAXIS1), z=z + dz, verbose=False,
                 noise_plots=False, fit_plots=True, save_fits=save_fits,
                 clean=True, quiet=True, age_lim=13.5, n_moments=n_moments,
                 bias=None, objname=objname, oversample=False, reddening=EBV,
@@ -1446,16 +1455,16 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
 
             # print pp.weights.shape, len(Zs), len(ts)
 
-            pop_samples = rejection_sample_2d(
-                Zs, ts, pp.weights.reshape(len(Zs), len(ts)))
-            # no need to normalize here
-            Z_marg = pp.weights.reshape(len(Zs), len(ts)).sum(axis=1)
-            t_marg = pp.weights.reshape(len(Zs), len(ts)).sum(axis=0)
-            Z_samples = pop_samples[:, 0]
-            t_samples = pop_samples[:, 1]
+            '''pop_samples = rejection_sample_2d(
+                    Zs, ts, pp.weights.reshape(len(Zs), len(ts)))
+                # no need to normalize here
+                Z_marg = pp.weights.reshape(len(Zs), len(ts)).sum(axis=1)
+                t_marg = pp.weights.reshape(len(Zs), len(ts)).sum(axis=0)
+                Z_samples = pop_samples[:, 0]
+                t_samples = pop_samples[:, 1]
 
-            fiber_Z = np.array(np.percentile(Z_samples, [16., 50., 84.]))
-            fiber_t = np.array(np.percentile(t_samples, [16., 50., 84.]))
+                fiber_Z = np.array(np.percentile(Z_samples, [16., 50., 84.]))
+                fiber_t = np.array(np.percentile(t_samples, [16., 50., 84.]))'''
 
             fiber_Z_avg = np.log10(
                 np.average(10.**ssps['Z'], weights=ssps['fits']))
