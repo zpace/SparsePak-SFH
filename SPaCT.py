@@ -708,7 +708,7 @@ def gal_im_fiber_plot(objname, fibers, quantity=None, qty_dets='',
     X, Y = np.meshgrid(x, y)
     galim = plt.imshow(
         im, extent=[-40, 40, -40, 40], origin='lower',
-        interpolation='nearest', zorder=0)
+        interpolation='nearest', zorder=0, aspect='equal')
 
     fibers = fibers[fibers['sky'] != 1]
     fibers = fibers[np.isnan(fibers[quantity]) == False]
@@ -782,7 +782,7 @@ def gal_im_fiber_plot(objname, fibers, quantity=None, qty_dets='',
 
 
 def gal_rad_dep_plot(objname, fibers, quantity=None, qty_dets='',
-                     save=False, offset=0., fit=None):
+                     save=False, offset=0., fit=False):
     import os
     import numpy as np
     import matplotlib.pyplot as plt
@@ -809,13 +809,14 @@ def gal_rad_dep_plot(objname, fibers, quantity=None, qty_dets='',
 
     plt.xlim([-5., 50.])
 
-    if fit:
+    if fit == True:
         if (quantity == 'V') or (quantity == 'sigma'):
             dq = fibers['d' + quantity]
             dq[dq == 0.] = np.min(dq[dq != 0.])
         else:
             dq = None
 
+        '''
         popt, pcov = fitting_tools.linear_fit(
             fibers['r'], fibers[quantity], sigma=dq)
 
@@ -831,6 +832,7 @@ def gal_rad_dep_plot(objname, fibers, quantity=None, qty_dets='',
             plt.plot(x_display, y_display, linestyle='--', c='k', alpha=0.75,
                      label=line_label)
             plt.legend(loc='best', prop={'size': 8})
+        '''
 
     plt.ylabel(quantity + qty_dets, size=16)
     plt.xlabel('radius [arcsec]', size=16)
@@ -933,9 +935,10 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
     lamRange1 = lamRange1
     FWHM_gal = FWHM_gal / (1 + z)
 
-    print z
+    # print z
 
     galaxy, logLam1, velscale = util.log_rebin(lamRange1, ifu[fiber])
+    lam_obs = np.exp(logLam1)
     logLam1 -= z
     lamRange1 = np.array([np.exp(logLam1[0]), np.exp(logLam1[-1])])
 
@@ -1057,15 +1060,18 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
     c = 299792.458
     dl = np.exp(logLam2[0])-np.exp(logLam1[0])
     dv = c*(logLam2[0] - logLam1[0])  # km/s
-    print dl, dv
+    # print dl, dv
     # print 'dv:', dv, 'km/s'
 
     vel = 0.
     # print 'SDSS velocity:', c*z, 'km/s'
     goodPixels = util.determine_goodpixels(logLam1, lamRange2, vel)
     # mask out the OI sky line and whatever weirdness goes along with it
+    # goodPixels = np.array(
+    #    [pixel for pixel in goodPixels if not 1183 <= pixel <= 1200])
     goodPixels = np.array(
-        [pixel for pixel in goodPixels if not 1183 <= pixel <= 1200])
+        [pixel for pixel in goodPixels
+         if not 5563.2 <= lam_obs[pixel] <= 5587.])
     # mask out last 100 pixels with weird end behavior
     goodPixels = np.array(
         [pixel for pixel in goodPixels if not len(galaxy) - 100
@@ -1103,11 +1109,6 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=DeprecationWarning)
-
-        if fit_plots == True:
-            plt.close('all')
-            fig = plt.figure(figsize=(8, 6))
-            plt.subplot(211)
 
         lam = np.exp(logLam1)
 
@@ -1195,20 +1196,22 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
 
         pp = ppxf(templates=all_templates, galaxy=galaxy/np.median(galaxy),
                   noise=noise, velScale=velscale, start=start,
-                  goodpixels=goodPixels, clean=clean, plot=fit_plots,
+                  goodpixels=goodPixels, clean=clean, plot=False,
                   moments=n_moments, vsyst=dv, reddening=reddening,
                   lam=lam, bias=bias, quiet=quiet, oversample=oversample,
                   regul=regul, reg_dim=reg_dim, component=component)
+
+        print z, lam[0], lam[-1]
 
         print 'Final pass results'
         if gas_comps > 0:
             print '\t', pp.sol[0]
             # shift lam slightly, based on sol
             #(similar statement for gas-less case is in else statement)
-            lam *= (1. + z) / (1. + z + pp.sol[0][0]/c)
+            lam = np.exp(logLam1 + pp.sol[0][0]/c)
         else:
             print '\t', pp.sol
-            lam *= (1. + z) / (1. + z + pp.sol[0]/c)
+            lam = np.exp(logLam1 + pp.sol[0]/c)
         print '\tChi2/DOF =', pp.chi2
 
         if gas_comps not in (0, None):
@@ -1227,29 +1230,88 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         # print 'Third pass successful'
 
         if fit_plots == True:
-            plt.fill_between(
-                np.arange(0, len(noise)),
+
+                # create a figure
+            plt.close('all')
+            fig = plt.figure(figsize=(8, 6))
+
+            import matplotlib.gridspec as gridspec
+            gs = gridspec.GridSpec(4, 1, height_ratios=[3, 1, 1.25, 2])
+            ax1 = plt.subplot(gs[0])
+
+            # first plot the input spectrum
+            ax1.plot(pp.lam, pp.galaxy, c='k', label='galaxy')
+            ax1.fill_between(
+                pp.lam,
                 (galaxy - noise)/np.median(galaxy),
                 (galaxy + noise)/np.median(galaxy), edgecolor='#ff5f00',
                 facecolor='coral', alpha=0.5)
+            # best fit
+            ax1.plot(pp.lam, pp.bestfit, c='r', linewidth=2, label='pPXF fit')
+            # residuals
+            mn = np.min(pp.bestfit[pp.goodpixels])
+            mx = np.max(pp.bestfit[pp.goodpixels])
+            resid = mn + pp.galaxy - pp.bestfit
+            mn1 = np.min(resid[pp.goodpixels])
+            ax1.plot(pp.lam[pp.goodpixels], resid[pp.goodpixels],
+                     marker='.', markersize=2, c='cyan',
+                     markeredgecolor='cyan', linestyle='None', zorder=1)
+            ax1.plot(pp.lam[pp.goodpixels], pp.goodpixels*0 + mn,
+                     marker=',', c='k', zorder=0)
 
-            if gas_comps not in (0, None):
-                plt.plot(
-                    np.arange(0, len(noise)), gas + 0.15, c='b', linewidth=2)
+            w = np.where(np.diff(pp.goodpixels) > 1)[0]
+            if w.size > 0:
+                for wj in w:
+                    x = np.arange(pp.goodpixels[wj], pp.goodpixels[wj+1])
+                    ax1.plot(pp.lam[x], resid[x], 'indigo')
+                w = np.hstack([0, w, w+1, -1])  # Add first and last point
+            else:
+                w = [0, -1]
+            for gj in pp.goodpixels[w]:
+                ax1.plot([pp.lam[gj], pp.lam[gj]], [mn, pp.bestfit[gj]],
+                         color='orange', linewidth=0.5)
 
-            label_locs = np.arange(
-                100.*np.floor(np.min(lam)/100.),
-                100.*np.ceil(np.max(lam)/100.), 200).astype(int)
-            plt.xticks(
-                lin_remap(
-                    label_locs, (lam[0], lam[-1]), (0, len(lam))),
-                label_locs)
-            plt.xlabel('$\lambda_{rest}[\AA]$', size=16)
+            # turn off tick labels for x axis
+            ax1.spines['bottom'].set_visible(False)
+            plt.setp(ax1.get_xticklabels(), visible=False)
+            ax1.set_ylabel("Counts", fontsize=16)
+            ax1.legend(loc='best')
 
-            plt.tick_params(axis='both', which='major', labelsize=12)
-            plt.subplots_adjust(top=0.8)
+            # set up a twin axis to display pixel positions
+            # DO NOT CHANGE XLIMS OF ANYTHING!!!!
 
-            ax2 = plt.subplot(212)
+            ax1_pix = ax1.twiny()
+            ax1_pix.plot(np.arange(NAXIS1), np.zeros(NAXIS1))
+            ax1_pix.set_xlim([0, NAXIS1 - 1])
+            ax1_pix.set_xlabel('Pixel')
+
+            ax1.set_ylim([mn1, mx] + np.array([-0.05, 0.05])*(mx-mn1))
+
+            # set up an axis to display residuals vs noise
+
+            ax1_res = plt.subplot(gs[1], sharex=ax1)
+            ax1_res.plot(pp.lam[pp.goodpixels],
+                         (noise/galaxy)[pp.goodpixels], marker='.',
+                         c='coral', linestyle='None', markersize=2,
+                         label='noise')
+            ax1_res.plot(pp.lam[pp.goodpixels],
+                         (resid/pp.bestfit)[pp.goodpixels], marker='.',
+                         c='cyan', linestyle='None', markersize=2,
+                         label='resid', alpha=0.5)
+            ax1_res.set_xlabel(r'$\lambda_r ~ [\AA]$')
+
+            ax1_res.legend(loc='best', prop={'size': 8})
+
+            _ = [tick.label.set_fontsize(8) for tick in
+                 ax1_res.yaxis.get_major_ticks()]
+
+            ax1.set_xlim([np.min(pp.lam), np.max(pp.lam)])
+
+            # this is just a dummy axis for spacing purposes
+            pad_ax = plt.subplot(gs[2])
+            pad_ax.axis('off')
+
+            ax2 = plt.subplot(gs[3])
             # print s
 
             # make a weights array for display, s.t. # rows = # Z vals
@@ -1280,7 +1342,8 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             plt.suptitle(
                 objname + ' pPXF fit: fiber ' + str(fiber),
                 size=18)
-            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            plt.subplots_adjust(hspace=0.01, top=0.85)
+            # plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
         '''
 		print("Formal errors:")
@@ -1435,10 +1498,7 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         CRVAL1 = h['CRVAL1']
         CDELT1 = h['CDELT1']
 
-        if first_few == 1:
-            save_fits = False
-        else:
-            save_fits = True
+        save_fits = True
 
         try:
             pp, ssps = SP_pPXF(
@@ -1491,6 +1551,9 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         except ZeroDivisionError:
             print 'No fit in fiber', fiber
 
+        except TypeError:  # occasionally you get a bad mpfit
+            print 'probably velScale/mpfit error in fiber', fiber
+
         if first_few:
             if i >= (first_few - 1):
                 break
@@ -1504,23 +1567,29 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         print 'Written to', objname + '/fiberfits.dat'
 
 
-'''
-im, fiberflat = load_ifus_precorrection('NGC2558')
+def find_voffset(objname):
+    import astropy.io.ascii as ascii
+    import lts_planefit  # cappellari's lts_planefit
+    import matplotlib.pyplot as plt
+    import numpy as np
 
-plate = 1927
-mjd = 53321
-fiber = 290
-sdss = fetch_sdss_spectrum(plate, mjd, fiber)
+    fiberfits = ascii.read(objname + '/fiberfits.dat')
+    plt.close('all')
 
-# z_test(im, fiberflat, sdss, fiber = 47, dz = .00925)
-# z_test(im, fiberflat, sdss, fiber = 27, dz = 0.01)
-# z_test(im, fiberflat, sdss, fiber = 60, dz = .00925)
-# z_test(im, fiberflat, sdss, fiber = 38, dz = .00925)
-# z_test(im, fiberflat, sdss, fiber = 42, dz = .00925)
-# z_test(im, fiberflat, sdss, fiber = 22, dz = .00925)
-# z_test(im, fiberflat, sdss, fiber = 41, dz = .00925)
-z_test(im, fiberflat, sdss, fiber = 47, dz = .0000)
+    fiberfits = fiberfits[fiberfits['sky'] != 1]
+    fiberfits = fiberfits[np.isnan(fiberfits['V']) != True]
 
-dz, ifu_corr = sdss_cal(im, fiberflat, sdss, dz = 0., verbose = True)
-# write_corr_frame(ifu_corr, im, .017, dz, 'NGC2558')
-'''
+    # calculate the 1-sigma error bars for each fiber position
+    # 68.3% of light is contained within dr**2. = dx**2 + dy**2.
+    dx = np.sqrt(0.683 * (4.687/2)**2.) * np.ones(len(fiberfits))
+    dy = dx
+
+    pf = lts_planefit.lts_planefit(
+        fiberfits['ra'], fiberfits['dec'], fiberfits['V'],
+        sigx=dx, sigy=dy, sigz=fiberfits['dV'],
+        pivotx=0., pivoty=0., plot=True, text=False, frac=0.5)
+
+    plt.savefig(objname + '/V_plane.png')
+
+    # just return `a`
+    return pf.abc[0]
