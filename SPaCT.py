@@ -694,19 +694,24 @@ def gal_im_fiber_plot(objname, fibers, quantity=None, qty_dets='',
     import matplotlib.pyplot as plt
     import matplotlib.image as mpimg
     import matplotlib as mpl
+    import matplotlib.gridspec as gridspec
     import plotting_tools
 
     plt.close('all')
 
-    fig = plt.figure(figsize=(4, 4), dpi=300)
+    fig = plt.figure(figsize=(5, 4), dpi=300)
+    gs = gridspec.GridSpec(1, 2, width_ratios=[20, 1])
+    # create one axis for image + fibers, another for colorbar
+    ax1 = plt.subplot(gs[0])
 
-    # you can get custom-sized images at http://skyserver.sdss3.org/dr10/en/tools/chart/image.aspx
+    # you can get custom-sized images at
+    # http://skyserver.sdss3.org/dr10/en/tools/chart/image.aspx
     # explore at http://skyserver.sdss3.org/dr10/en/tools/explore/default.aspx
 
     im = mpimg.imread(objname + '.png')
     x = y = np.linspace(-40., 40., np.shape(im)[0])
     X, Y = np.meshgrid(x, y)
-    galim = plt.imshow(
+    galim = ax1.imshow(
         im, extent=[-40, 40, -40, 40], origin='lower',
         interpolation='nearest', zorder=0, aspect='equal')
 
@@ -718,41 +723,61 @@ def gal_im_fiber_plot(objname, fibers, quantity=None, qty_dets='',
     # set up cmap based on whether the quantity is even or odd
     # if odd, then it enforces symmetry around `offset` values
     if oe == 'odd':
-        cmap = mpl.cm.get_cmap('RdBu_r')
+        cmap = mpl.cm.RdBu_r
+        extend = 'both'
     else:
-        cmap = 'cubehelix_r'
+        cmap = mpl.cm.cubehelix_r
+        extend = 'max'
 
-    if (quantity != None) and (quantity not in ['Z', 't']):
-        if quantity == 'V':
+    if (quantity != None):
+        if (quantity not in ['Z', 't']):
+            if quantity == 'V':
+                cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
+                              c=fibers[quantity], alpha=0.8, zorder=2,
+                              cmap=cmap, vmin=-300., vmax=300.)
+                norm = mpl.colors.Normalize(vmin=-300., vmax=300.)
+            elif quantity == 'sigma':
+                cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
+                              c=fibers[quantity], alpha=0.8, zorder=2,
+                              cmap=cmap, vmin=0.0, vmax=300.)
+                norm = mpl.colors.Normalize(vmin=0., vmax=300.)
+            else:
+                cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
+                              c=fibers[quantity], alpha=0.8, zorder=2,
+                              cmap=cmap)
+                norm = None
+        elif quantity in ['Z', 't']:  # since these are percentile bounds
+            q = fibers[quantity]
             cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
-                          c=fibers[quantity], alpha=0.8, zorder=2,
-                          cmap=cmap, vmin=-300., vmax=300.)
-        elif quantity == 'sigma':
-            cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
-                          c=fibers[quantity], alpha=0.8, zorder=2,
-                          cmap=cmap, vmin=0.0, vmax=300.)
-        else:
-            cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
-                          c=fibers[quantity], alpha=0.8, zorder=2,
-                          cmap=cmap)
-        cbar = fig.colorbar(cir, shrink=0.8)
-        cbar.set_label(quantity + qty_dets, size=12)
-        if quantity == 'V':
-            cbar.cmap.set_over('r')
-            cbar.cmap.set_under('b')
-        elif oe == 'even':
-            cbar.cmap.set_over('k')
-            cbar.cmap.set_under('w')
+                          c=q, alpha=0.8, zorder=2, cmap=cmap,
+                          vmin=np.min(fibers[quantity]),
+                          vmax=np.max(fibers[quantity]))
+            if quantity == 'Z':
+                norm = mpl.colors.Normalize(
+                    vmin=np.min(fibers[quantity]),
+                    vmax=np.max(fibers[quantity]))
+            elif quantity == 't':
+                norm = mpl.colors.Normalize(
+                    vmin=np.min(fibers[quantity]),
+                    vmax=np.max(fibers[quantity]))
 
-    elif quantity in ['Z', 't']:  # since these are percentile bounds
-        q = fibers[quantity]
-        cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
-                      c=q, alpha=0.8, zorder=2, cmap=cmap)
-        cbar = fig.colorbar(cir, shrink=0.8)
-        cbar.set_label(quantity + qty_dets, size=12)
     else:
         cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
                       edgecolor='None', alpha=0.8, zorder=2)
+
+    plt.xlim([-40, 40])
+    plt.xticks([-40., -20., 0., 20., 40.])
+    plt.ylim([-40, 40])
+    plt.yticks([-40., -20., 0., 20., 40.])
+    plt.xlabel('RA offset [arcsec]', fontsize=12)
+    plt.ylabel('Dec offset [arcsec]', fontsize=12)
+    plt.title(objname, fontsize=14)
+
+    # set up colorbar axis
+    ax2 = plt.subplot(gs[1])
+    cb = mpl.colorbar.ColorbarBase(
+        ax2, cmap=cmap, norm=norm, orientation='vertical', extend=extend)
+    cb.set_label('{0} {1}'.format(quantity, qty_dets))
 
     if text == True:
         for row in fibers:
@@ -762,13 +787,6 @@ def gal_im_fiber_plot(objname, fibers, quantity=None, qty_dets='',
                     s=str(row['fiber']) + '\n' + str(row['row']),
                     color='g', size=14, zorder=3)
 
-    plt.xlim([-40, 40])
-    plt.xticks([-40., -20., 0., 20., 40.])
-    plt.ylim([-40, 40])
-    plt.yticks([-40., -20., 0., 20., 40.])
-    plt.xlabel('RA offset [arcsec]', fontsize=12)
-    plt.ylabel('Dec offset [arcsec]', fontsize=12)
-    plt.title(objname, fontsize=14)
     plt.tight_layout()
 
     if (save == True) and (quantity != None):
@@ -1565,6 +1583,24 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
             pass
         fiberdata.write(objname + '/fiberfits.dat', format='ascii')
         print 'Written to', objname + '/fiberfits.dat'
+
+
+def planefit(objname, quantity):
+	import astropy.io.asci as ascii
+	import matplotlib.pyplot as plt
+	import numpy as np
+	from pymc import MCMC
+	from pymc import Matplot as mcplot
+
+    fiberfits = ascii.read(objname + '/fiberfits.dat')
+    plt.close('all')
+
+    fiberfits = fiberfits[fiberfits['sky'] != 1]
+    fiberfits = fiberfits[np.isnan(fiberfits['V']) != True]
+
+    # create a model to fit a plane
+    # characteristics
+
 
 
 def find_voffset(objname):
