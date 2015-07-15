@@ -1,0 +1,6 @@
+digraph G {
+kappa_slope;
+mu_slope;
+mean_int;
+mean_slope_angle;
+}

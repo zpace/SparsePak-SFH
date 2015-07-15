@@ -734,13 +734,13 @@ def gal_im_fiber_plot(objname, fibers, quantity=None, qty_dets='',
             if quantity == 'V':
                 cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
                               c=fibers[quantity], alpha=0.8, zorder=2,
-                              cmap=cmap, vmin=-300., vmax=300.)
-                norm = mpl.colors.Normalize(vmin=-300., vmax=300.)
+                              cmap=cmap, vmin=-500., vmax=500.)
+                norm = mpl.colors.Normalize(vmin=-500., vmax=500.)
             elif quantity == 'sigma':
                 cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
                               c=fibers[quantity], alpha=0.8, zorder=2,
-                              cmap=cmap, vmin=0.0, vmax=300.)
-                norm = mpl.colors.Normalize(vmin=0., vmax=300.)
+                              cmap=cmap, vmin=0.0, vmax=400.)
+                norm = mpl.colors.Normalize(vmin=0., vmax=400.)
             else:
                 cir = circles(fibers['ra'], fibers['dec'], s=fibersize/2.,
                               c=fibers[quantity], alpha=0.8, zorder=2,
@@ -1583,24 +1583,6 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
             pass
         fiberdata.write(objname + '/fiberfits.dat', format='ascii')
         print 'Written to', objname + '/fiberfits.dat'
-
-
-def planefit(objname, quantity):
-	import astropy.io.asci as ascii
-	import matplotlib.pyplot as plt
-	import numpy as np
-	from pymc import MCMC
-	from pymc import Matplot as mcplot
-
-    fiberfits = ascii.read(objname + '/fiberfits.dat')
-    plt.close('all')
-
-    fiberfits = fiberfits[fiberfits['sky'] != 1]
-    fiberfits = fiberfits[np.isnan(fiberfits['V']) != True]
-
-    # create a model to fit a plane
-    # characteristics
-
 
 
 def find_voffset(objname):
