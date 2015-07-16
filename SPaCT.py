@@ -1393,10 +1393,13 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
     return pp, ssps
 
 
-def pPXF_make_derived_plots(objname, v_offset=0.):
+def pPXF_make_derived_plots(objname, v_offset=None):
     import astropy.io.ascii as ascii
 
     fiberdata = ascii.read(objname + '/fiberfits.dat')
+
+    if v_offset == None:
+        v_offset = - fiberdata['V'][0]
 
     gal_im_fiber_plot(
         objname=objname, fibers=fiberdata, quantity='t',
