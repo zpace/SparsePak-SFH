@@ -37,6 +37,7 @@ from time import clock
 from ppxf import ppxf
 import ppxf_util as util
 
+
 def setup_spectral_library(velscale, FWHM_gal):
 
     # Read the list of filenames from the Single Stellar Population library
@@ -61,7 +62,7 @@ def setup_spectral_library(velscale, FWHM_gal):
     # directory "miles_models" under the current directory.
     #
     vazdekis = glob.glob('miles_models/Mun1.30*.fits')
-    FWHM_tem = 2.51 # Vazdekis+10 spectra have a resolution FWHM of 2.51A.
+    FWHM_tem = 2.51  # Vazdekis+10 spectra have a resolution FWHM of 2.51A.
 
     # Extract the wavelength range and logarithmically rebin one spectrum
     # to the same velocity scale of the SDSS galaxy spectrum, to determine
@@ -70,15 +71,17 @@ def setup_spectral_library(velscale, FWHM_gal):
     hdu = pyfits.open(vazdekis[0])
     ssp = hdu[0].data
     h2 = hdu[0].header
-    lamRange_temp = h2['CRVAL1'] + np.array([0.,h2['CDELT1']*(h2['NAXIS1']-1)])
-    sspNew, logLam_temp, velscale = util.log_rebin(lamRange_temp, ssp, velscale=velscale)
+    lamRange_temp = h2['CRVAL1'] + \
+        np.array([0., h2['CDELT1']*(h2['NAXIS1']-1)])
+    sspNew, logLam_temp, velscale = util.log_rebin(
+        lamRange_temp, ssp, velscale=velscale)
 
     # Create a three dimensional array to store the
     # two dimensional grid of model spectra
     #
     nAges = 26
     nMetal = 6
-    templates = np.empty((sspNew.size,nAges,nMetal))
+    templates = np.empty((sspNew.size, nAges, nMetal))
 
     # Convolve the whole Vazdekis library of spectral templates
     # with the quadratic difference between the SDSS and the
@@ -90,7 +93,7 @@ def setup_spectral_library(velscale, FWHM_gal):
     # instrumental spectral profiles are well approximated by Gaussians.
     #
     FWHM_dif = np.sqrt(FWHM_gal**2 - FWHM_tem**2)
-    sigma = FWHM_dif/2.355/h2['CDELT1'] # Sigma difference in pixels
+    sigma = FWHM_dif/2.355/h2['CDELT1']  # Sigma difference in pixels
 
     # Here we make sure the spectra are sorted in both [M/H]
     # and Age along the two axes of the rectangular grid of templates.
@@ -103,13 +106,15 @@ def setup_spectral_library(velscale, FWHM_gal):
         for j, filename in enumerate(files):
             hdu = pyfits.open(filename)
             ssp = hdu[0].data
-            ssp = ndimage.gaussian_filter1d(ssp,sigma)
-            sspNew, logLam2, velscale = util.log_rebin(lamRange_temp, ssp, velscale=velscale)
-            templates[:,j,k] = sspNew # Templates are *not* normalized here
+            ssp = ndimage.gaussian_filter1d(ssp, sigma)
+            sspNew, logLam2, velscale = util.log_rebin(
+                lamRange_temp, ssp, velscale=velscale)
+            templates[:, j, k] = sspNew  # Templates are *not* normalized here
 
     return templates, lamRange_temp, logLam_temp
 
 #------------------------------------------------------------------------------
+
 
 def ppxf_population_gas_example_sdss():
 
@@ -120,12 +125,13 @@ def ppxf_population_gas_example_sdss():
     file = 'spectra/NGC3522_SDSS.fits'
     hdu = pyfits.open(file)
     t = hdu[1].data
-    z = float(hdu[1].header["Z"]) # SDSS redshift estimate
+    z = float(hdu[1].header["Z"])  # SDSS redshift estimate
 
     # Only use the wavelength range in common between galaxy and stellar library.
     #
     mask = (t.field('wavelength') > 3540) & (t.field('wavelength') < 7409)
-    galaxy = t[mask].field('flux')/np.median(t[mask].field('flux'))  # Normalize spectrum to avoid numerical issues
+    # Normalize spectrum to avoid numerical issues
+    galaxy = t[mask].field('flux')/np.median(t[mask].field('flux'))
     wave = t[mask].field('wavelength')
 
     # The noise level is chosen to give Chi^2/DOF=1 without regularization (REGUL=0).
@@ -137,9 +143,9 @@ def ppxf_population_gas_example_sdss():
     # The velocity step was already chosen by the SDSS pipeline
     # and we convert it below to km/s
     #
-    c = 299792.458 # speed of light in km/s
+    c = 299792.458  # speed of light in km/s
     velscale = np.log(wave[1]/wave[0])*c
-    FWHM_gal = 2.76 # SDSS has an instrumental resolution FWHM of 2.76A.
+    FWHM_gal = 2.76  # SDSS has an instrumental resolution FWHM of 2.76A.
 
     #------------------- Setup templates -----------------------
 
@@ -152,14 +158,15 @@ def ppxf_population_gas_example_sdss():
     #
     reg_dim = stars_templates.shape[1:]
     print(stars_templates.shape, reg_dim)
-    stars_templates = stars_templates.reshape(stars_templates.shape[0],-1)
-    print(stars_templates.reshape(stars_templates.shape[0],-1).shape)
+    stars_templates = stars_templates.reshape(stars_templates.shape[0], -1)
+    print(stars_templates.reshape(stars_templates.shape[0], -1).shape)
 
     # See the pPXF documentation for the keyword REGUL,
     # for an explanation of the following two lines
     #
-    stars_templates /= np.median(stars_templates) # Normalizes stellar templates by a scalar
-    regul_err = 0.004 # Desired regularization error
+    # Normalizes stellar templates by a scalar
+    stars_templates /= np.median(stars_templates)
+    regul_err = 0.004  # Desired regularization error
 
     # Construct a set of Gaussian emission line templates.
     # Estimate the wavelength fitted range in the rest frame.
@@ -186,8 +193,8 @@ def ppxf_population_gas_example_sdss():
     # in PPXF_KINEMATICS_EXAMPLE_SAURON.
     #
     c = 299792.458
-    dv = (np.log(lamRange_temp[0])-np.log(wave[0]))*c # km/s
-    vel = c*z # Initial estimate of the galaxy velocity in km/s
+    dv = (np.log(lamRange_temp[0])-np.log(wave[0]))*c  # km/s
+    vel = c*z  # Initial estimate of the galaxy velocity in km/s
 
     # Here the actual fit starts. The best fit is plotted on the screen.
     #
@@ -199,7 +206,7 @@ def ppxf_population_gas_example_sdss():
     # multiplicative ones (MDEGREE=10). This is only recommended for population, not
     # for kinematic extraction, where additive polynomials are always recommended.
     #
-    start = [vel, 180.] # (km/s), starting guess for [V,sigma]
+    start = [vel, 180.]  # (km/s), starting guess for [V,sigma]
 
     t = clock()
 
@@ -212,8 +219,9 @@ def ppxf_population_gas_example_sdss():
     nTemps = stars_templates.shape[1]
     nLines = gas_templates.shape[1]
     component = [0]*nTemps + [1]*nLines
-    moments = [4, 2] # fit (V,sig,h3,h4) for the stars and (V,sig) for the gas
-    start = [start, start] # adopt the same starting value for both gas and stars
+    moments = [4, 2]  # fit (V,sig,h3,h4) for the stars and (V,sig) for the gas
+    # adopt the same starting value for both gas and stars
+    start = [start, start]
 
     pp = ppxf(templates, galaxy, noise, velscale, start,
               plot=False, moments=moments, degree=-1, mdegree=10,
@@ -228,14 +236,16 @@ def ppxf_population_gas_example_sdss():
     plt.plot(wave, pp.bestfit, 'b', linewidth=2)
     plt.xlabel("Observed Wavelength ($\AA$)")
     plt.ylabel("Relative Flux")
-    plt.ylim([-0.1,1.3])
+    plt.ylim([-0.1, 1.3])
     plt.xlim([np.min(wave), np.max(wave)])
-    plt.plot(wave, pp.galaxy-pp.bestfit, 'd', ms=4, c='LimeGreen', mec='LimeGreen') # fit residuals
+    # fit residuals
+    plt.plot(wave, pp.galaxy-pp.bestfit, 'd',
+             ms=4, c='LimeGreen', mec='LimeGreen')
     plt.axhline(y=-0, linestyle='--', color='k', linewidth=2)
-    stars = pp.matrix[:,:nTemps].dot(pp.weights[:nTemps])
-    plt.plot(wave, stars, 'r', linewidth=2) # overplot stellar templates alone
-    gas = pp.matrix[:,-nLines:].dot(pp.weights[-nLines:])
-    plt.plot(wave, gas+0.15, 'b', linewidth=2) # overplot emission lines alone
+    stars = pp.matrix[:, :nTemps].dot(pp.weights[:nTemps])
+    plt.plot(wave, stars, 'r', linewidth=2)  # overplot stellar templates alone
+    gas = pp.matrix[:, -nLines:].dot(pp.weights[-nLines:])
+    plt.plot(wave, gas+0.15, 'b', linewidth=2)  # overplot emission lines alone
 
     # When the two Delta Chi^2 below are the same, the solution is the smoothest
     # consistent with the observed spectrum.
@@ -244,11 +254,12 @@ def ppxf_population_gas_example_sdss():
     print('Current Delta Chi^2: %.4g' % ((pp.chi2 - 1)*galaxy.size))
     print('Elapsed time in PPXF: %.2f s' % (clock() - t))
 
-    w = np.where(np.array(component) == 1)[0] # Extract weights of gas emissions
+    # Extract weights of gas emissions
+    w = np.where(np.array(component) == 1)[0]
     print('++++++++++++++++++++++++++++++')
     print('Gas V=%.4g and sigma=%.2g km/s' % (pp.sol[1][0], pp.sol[1][1]))
     print('Emission lines peak intensity:')
-    for name, weight, line in zip(line_names, pp.weights[w], pp.matrix[:,w].T):
+    for name, weight, line in zip(line_names, pp.weights[w], pp.matrix[:, w].T):
         print('%12s: %.3g' % (name, weight*np.max(line)))
     print('------------------------------')
 

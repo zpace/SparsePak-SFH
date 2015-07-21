@@ -4,39 +4,39 @@ Author: Zach Pace (U Wisc-Madison)
 License: GNU GPLv2
 
 Some tools for correcting un-flux-calibrated SparsePak data when there's
-	no standard star.
+    no standard star.
 
 Performance not guaranteed. Success dependent on correct redshift,
-	correct centering of SparsePak & SDSS.
+    correct centering of SparsePak & SDSS.
 
 Changelog:
 Version 0.1 (Nov 2014)
-	- correct using interpolated fiberflat
+    - correct using interpolated fiberflat
 Version 0.2 (Dec 2014)
-	- move from NGC2558 ipynb into standalone file
-	- add correction with SDSS spectrum
-	- add output to <OBJNAME>_fluxcal.fits
+    - move from NGC2558 ipynb into standalone file
+    - add correction with SDSS spectrum
+    - add output to <OBJNAME>_fluxcal.fits
 
 Version 0.2.1 (Dec 2014)
-	- add z_test function
+    - add z_test function
 
 Version 0.2.2 (Jan 2015)
-	- pre-blur SDSS and SparsePak spectra before making correction array,
-		to ensure just the overall shape of the curve is fit
-	- pre-load reduced science and fiberflat frame
+    - pre-blur SDSS and SparsePak spectra before making correction array,
+        to ensure just the overall shape of the curve is fit
+    - pre-load reduced science and fiberflat frame
 
 Version 0.3.0 (Jan 2015)
-	- corrected to include both the survey-found z and a dz
-	- added a blur parameter, along with a blur visualizer
-	- provided SED in erg/s/cm^2/A, eliminating 10^-17 factor to make
-		it more machine-readable
+    - corrected to include both the survey-found z and a dz
+    - added a blur parameter, along with a blur visualizer
+    - provided SED in erg/s/cm^2/A, eliminating 10^-17 factor to make
+        it more machine-readable
 
 Version 0.4.0 (Mar 2015)
-	- transcribed pPXF fit routine
-	- added SNR calculations
+    - transcribed pPXF fit routine
+    - added SNR calculations
 
 Version 0.5.0 (Apr 2015)
-	- corrected pPXF wrapper per M. Cappellari's suggestions
+    - corrected pPXF wrapper per M. Cappellari's suggestions
 '''
 
 # SYNTAX EXAMPLE
@@ -69,9 +69,9 @@ def flux_to_counts(flux, l, h=6.62606957e-27, c=2.99792458e18, t=1200.,
                    a=9.6e4, dl=1.4):
     import numpy as np
     '''
-	Convert a flux measurement (in erg/s/cm^2/AA) into a photon counts
-	measurement. Acts on a single data row at a time.
-	'''
+    Convert a flux measurement (in erg/s/cm^2/AA) into a photon counts
+    measurement. Acts on a single data row at a time.
+    '''
 
     fluxcal = h*c/((l) * dl * t * a)
     return flux / fluxcal
@@ -81,9 +81,9 @@ def counts_to_flux(counts, l, h=6.62606957e-27, c=2.99792458e18, t=1200.,
                    a=9.6e4, dl=1.4):
     import numpy as np
     '''
-	Convert a counts measurement into a flux measurement (in erg/s/cm^2/AA).
-	Acts on a single data row at a time.
-	'''
+    Convert a counts measurement into a flux measurement (in erg/s/cm^2/AA).
+    Acts on a single data row at a time.
+    '''
 
     fluxcal = h*c/((l) * dl * t * a)
     return counts * fluxcal
@@ -321,8 +321,8 @@ def sdss_cal(im, fiberflat, sdss, dz, z=0, verbose=False, fiber=47,
         print 'CDELT1:', CDELT1
 
     sparsepak_wavelength = 1. / \
-        (1. + dz) * \
-        np.linspace(CRVAL1, CRVAL1 + CDELT1 * NAXIS1, NAXIS1, endpoint=True)
+        (1. + dz) * np.linspace(
+            CRVAL1, CRVAL1 + CDELT1 * NAXIS1, NAXIS1, endpoint=True)
 
     h = 6.62606957e-27  # erg sec
     c = 2.99792458e18  # Angstrom/sec
@@ -854,6 +854,8 @@ def gal_rad_dep_plot(objname, fibers, quantity=None, qty_dets='',
 
     plt.ylabel(quantity + qty_dets, size=16)
     plt.xlabel('radius [arcsec]', size=16)
+    if quantity == 'sigma':
+        plt.ylim([0., 500.])
     plt.title(objname, fontsize=18)
     plt.tight_layout()
 
@@ -904,7 +906,7 @@ def pPXF_MC(pp, lam):
 
 def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             noise_plots=False, fit_plots=False, reddening=None, age_lim=13.6,
-            n_moments=4, bias=None,	objname='', clean=True, quiet=False,
+            n_moments=4, bias=None, objname='', clean=True, quiet=False,
             oversample=False, save_fits=False, gas_comps=None, regul=100.):
     '''
     Run Cappellari et al.'s pPXF on a SparsePak fiber
@@ -1319,6 +1321,9 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             ax1_res.set_xlabel(r'$\lambda_r ~ [\AA]$')
 
             ax1_res.legend(loc='best', prop={'size': 8})
+            ax1_res.set_ylabel(r'$\Delta_{rel}$')
+            ax1_res.set_yscale('log')
+            ax1_res.set_ylim([10**-2.5, 1.])
 
             _ = [tick.label.set_fontsize(8) for tick in
                  ax1_res.yaxis.get_major_ticks()]
@@ -1364,14 +1369,14 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             # plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
         '''
-		print("Formal errors:")
-		print("     dV    dsigma   dh3      dh4")
-		print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
+        print("Formal errors:")
+        print("     dV    dsigma   dh3      dh4")
+        print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
 
-		print('Elapsed time in PPXF: %.2f s' % (clock() - t))
-		print 'Best-fitting redshift z:', (z + 1)*(1 + pp.sol[0]/c) - 1, \
-		'+/-', np.abs((pp.error*np.sqrt(pp.chi2)/c))[0]
-		'''
+        print('Elapsed time in PPXF: %.2f s' % (clock() - t))
+        print 'Best-fitting redshift z:', (z + 1)*(1 + pp.sol[0]/c) - 1, \
+        '+/-', np.abs((pp.error*np.sqrt(pp.chi2)/c))[0]
+        '''
 
     ssps.add_column(Column(name='fits', data=pp.weights[:nStar_templates]))
 
@@ -1399,7 +1404,7 @@ def pPXF_make_derived_plots(objname, v_offset=None):
     fiberdata = ascii.read(objname + '/fiberfits.dat')
 
     if v_offset == None:
-        v_offset = - fiberdata['V'][0]
+        v_offset = - find_voffset(objname)
 
     gal_im_fiber_plot(
         objname=objname, fibers=fiberdata, quantity='t',
@@ -1479,17 +1484,19 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
     fiberdata = ascii.read('fiberdata.dat')
     # print fiberdata
 
-    im, fiberflat = load_ifus_precorrection(objname)
+    if not os.path.isfile(objname + '_fluxcal.fits'):
+        # only run flux-cal if none exists
+        im, fiberflat = load_ifus_precorrection(objname)
 
-    plate = objects[objname]['sdss_spec'][0]
-    mjd = objects[objname]['sdss_spec'][1]
-    sdss_fiber = objects[objname]['sdss_spec'][2]
-    sdss = fetch_sdss_spectrum(plate, mjd, sdss_fiber)
+        plate = objects[objname]['sdss_spec'][0]
+        mjd = objects[objname]['sdss_spec'][1]
+        sdss_fiber = objects[objname]['sdss_spec'][2]
+        sdss = fetch_sdss_spectrum(plate, mjd, sdss_fiber)
 
-    dz, ifu_corr, corr_poly = sdss_cal(
-        im, fiberflat, sdss, dz=0., z=z, verbose=False,
-        blur=75, full_output=True)
-    write_corr_frame(ifu_corr, im, z, dz, objname, verbose=False)
+        dz, ifu_corr, corr_poly = sdss_cal(
+            im, fiberflat, sdss, dz=0., z=z, verbose=False,
+            blur=75, full_output=True)
+        write_corr_frame(ifu_corr, im, z, dz, objname, verbose=False)
 
     fiberdata.add_column(
         table.Column(name='Z', data=np.nan*np.ones(len(fiberdata['row']))))
@@ -1588,10 +1595,12 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         print 'Written to', objname + '/fiberfits.dat'
 
 
-def find_voffset(objname):
+def find_voffset(objname, scale=5.):
     import astropy.io.ascii as ascii
-    import lts_planefit  # cappellari's lts_planefit
+    from matplotlib.mlab import griddata
     import matplotlib.pyplot as plt
+    import matplotlib as mpl
+    import matplotlib.gridspec as gridspec
     import numpy as np
 
     fiberfits = ascii.read(objname + '/fiberfits.dat')
@@ -1600,17 +1609,77 @@ def find_voffset(objname):
     fiberfits = fiberfits[fiberfits['sky'] != 1]
     fiberfits = fiberfits[np.isnan(fiberfits['V']) != True]
 
-    # calculate the 1-sigma error bars for each fiber position
-    # 68.3% of light is contained within dr**2. = dx**2 + dy**2.
-    dx = np.sqrt(0.683 * (4.687/2)**2.) * np.ones(len(fiberfits))
-    dy = dx
+    xi = np.arange(start=0., stop=1.1*np.max(fiberfits['ra']), step=scale)
+    xi = np.sort(np.unique(np.concatenate((xi, (-xi)[:-1]))))
 
-    pf = lts_planefit.lts_planefit(
-        fiberfits['ra'], fiberfits['dec'], fiberfits['V'],
-        sigx=dx, sigy=dy, sigz=fiberfits['dV'],
-        pivotx=0., pivoty=0., plot=True, text=False, frac=0.5)
+    yi = np.arange(start=0., stop=1.1*np.max(fiberfits['dec']), step=scale)
+    yi = np.sort(np.unique(np.concatenate((yi, (-yi)[:-1]))))
 
-    plt.savefig(objname + '/V_plane.png')
+    XI, YI = np.meshgrid(xi, yi)
+    center_pos = np.argmin(XI**2. + YI**2.)
 
-    # just return `a`
-    return pf.abc[0]
+    vmap = griddata(x=fiberfits['ra'], y=fiberfits['dec'],
+                    z=fiberfits['V'], xi=XI, yi=YI, interp='linear')
+
+    # print center_pos
+    v_0 = vmap.flatten()[center_pos]
+
+    plt.figure(figsize=(5, 4), dpi=300)
+    gs = gridspec.GridSpec(1, 2, width_ratios=[20, 1])
+    ax = plt.subplot(gs[0])
+
+    hsc = 0.5*scale
+
+    vmap_c = ax.imshow(vmap - v_0, cmap='RdBu_r', vmin=-500., vmax=500.,
+                       extent=[xi.min() - hsc, xi.max() + hsc,
+                               yi.min() - hsc, yi.max() + hsc],
+                       aspect='equal')
+
+    #ax.set_xlim([xi.min() - hsc, xi.max() + hsc])
+    #ax.set_ylim([yi.min() - hsc, yi.max() + hsc])
+
+    ax.set_xlabel('RA offset [arcsec]')
+    ax.set_ylabel('Dec ofset [arcsec]')
+    ax.set_title('V map')
+
+    ax2 = plt.subplot(gs[1])
+
+    cmap = mpl.cm.RdBu_r
+    extend = 'both'
+    norm = mpl.colors.Normalize(vmin=-500., vmax=500.)
+    cb = mpl.colorbar.ColorbarBase(
+        ax2, cmap=cmap, norm=norm, orientation='vertical', extend=extend)
+    cb.set_label('V [km/s]')
+
+    plt.tight_layout()
+    plt.savefig(objname + '/vmap_pcolor.png')
+
+    #=====
+
+    plt.figure(figsize=(5, 4), dpi=300)
+    gs = gridspec.GridSpec(1, 2, width_ratios=[20, 1])
+    ax = plt.subplot(gs[0])
+
+    hsc = 0.5*scale
+
+    vmap_cont = ax.contourf(vmap - v_0, cmap='RdBu_r', vmin=-500., vmax=500.,
+                            levels=[-500., -400., -300., -200., -100., 0.,
+                                    100., 200., 300., 400., 500.])
+
+    ax.set_xlabel('RA offset [arcsec]')
+    ax.set_ylabel('Dec ofset [arcsec]')
+    ax.set_title('V map')
+
+    ax2 = plt.subplot(gs[1])
+
+    cmap = mpl.cm.RdBu_r
+    extend = 'both'
+    norm = mpl.colors.Normalize(vmin=-500., vmax=500.)
+    cb = mpl.colorbar.ColorbarBase(
+        ax2, cmap=cmap, norm=norm, orientation='vertical', extend=extend)
+    cb.set_label('V [km/s]')
+
+    plt.tight_layout()
+    plt.savefig(objname + '/vmap_contourf.png')
+
+    return v_0
