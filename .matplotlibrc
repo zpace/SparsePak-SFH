@@ -1,7 +1,0 @@
-#
-# the following is the equivalent of
-# plt.rc('text', usetex = True)
-# plt.rc('font', family = 'serif')
-
-text.usetex		:	True
-font.family		:	serif
