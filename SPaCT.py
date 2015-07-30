@@ -1622,7 +1622,7 @@ def find_voffset(objname, scale=5.):
                     z=fiberfits['V'], xi=XI, yi=YI, interp='linear')
 
     # print center_pos
-    v_0 = vmap.flatten()[center_pos]
+    vsyst = vmap.flatten()[center_pos]
 
     plt.figure(figsize=(5, 4), dpi=300)
     gs = gridspec.GridSpec(1, 2, width_ratios=[20, 1])
@@ -1630,7 +1630,7 @@ def find_voffset(objname, scale=5.):
 
     hsc = 0.5*scale
 
-    vmap_c = ax.imshow(vmap - v_0, cmap='RdBu_r', vmin=-500., vmax=500.,
+    vmap_c = ax.imshow(vmap - vsyst, cmap='RdBu_r', vmin=-500., vmax=500.,
                        extent=[xi.min() - hsc, xi.max() + hsc,
                                yi.min() - hsc, yi.max() + hsc],
                        aspect='equal')
@@ -1662,12 +1662,12 @@ def find_voffset(objname, scale=5.):
 
     hsc = 0.5*scale
 
-    vmap_cont = ax.contourf(vmap - v_0, cmap='RdBu_r', vmin=-500., vmax=500.,
+    vmap_cont = ax.contourf(vmap - vsyst, cmap='RdBu_r', vmin=-500., vmax=500.,
                             levels=[-500., -400., -300., -200., -100., 0.,
                                     100., 200., 300., 400., 500.])
 
     ax.set_xlabel('RA offset [arcsec]')
-    ax.set_ylabel('Dec ofset [arcsec]')
+    ax.set_ylabel('Dec offset [arcsec]')
     ax.set_title('V map')
 
     ax2 = plt.subplot(gs[1])
@@ -1682,4 +1682,60 @@ def find_voffset(objname, scale=5.):
     plt.tight_layout()
     plt.savefig(objname + '/vmap_contourf.png')
 
-    return v_0
+    return vsyst
+
+
+def tilted_disk_model_tanh_(ra, dec, phi_0, i, V_sys, v_rot, h_rot):
+    '''
+    following the conventions of Andersen & Bershady (2013): ApJ 768:41
+
+    model the observed galaxy rotation map as a function of
+    their intrinsic rotation (tanh curve), the azimuthal angle
+    of the disk, and the inclination of the disk.
+
+    Parameters:
+        coords (things that go in)
+        {
+            ra: RA offset of fibers
+            dec: DEC offset of fibers
+        }
+        params (what we're trying to find--all angles are in radians)
+        {
+            - phi_0: position angle of apparent major axis of galaxy,
+                relative to North
+            - i: inclination angle
+            - V_sys: systemic velocity of galaxy
+            - v_rot: "asymptotic" rotation velocity of galaxy
+            - h_rot: rotation velocity saturation scale
+        }
+        intermediate params (other interesting things)
+        {
+            - r: quadrature sum of ra and dec
+            - R: radial position in the galaxy plane
+            - theta: angular position in the galaxy plane
+        }
+    Returns:
+        - V_obs: the velocity observed at a given spatial position
+            (basically, at a given fiber)
+    '''
+
+    import numpy as np
+
+    r = np.sqrt(ra**2. + dec**2.)
+
+    phi = np.arctan2(dec, ra)  # yes, this is the right argument order!
+
+    theta = np.arctan(np.tan(phi - phi_0) * np.cos(i))
+
+    R = r * np.cos(phi - phi_0) * np.cos(theta)
+
+    v_th = v_rot * np.tanh(R/h_rot)
+    v_th = V_th * np.sin(i)
+    V_obs = V_sys + v_th * np.cos(theta)
+
+    return V_obs
+
+
+def vfit_tilted_disk():
+    import numpy as np
+    import matplotlib.pyplot as plt
