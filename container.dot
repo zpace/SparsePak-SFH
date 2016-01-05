@@ -1,6 +1,23 @@
 digraph G {
-kappa_slope;
-mu_slope;
-mean_int;
-mean_slope_angle;
+v_obs_err;
+phi_0;
+incl;
+V_sys;
+v_rot;
+V;
+tilted_disk_model_tanh [shape=invtriangle];
+tilted_disk_model_tanh -> V  [label=mu];
+phi_0 -> tilted_disk_model_tanh  [label=phi_0];
+v_rot -> tilted_disk_model_tanh  [label=v_rot];
+V_sys -> tilted_disk_model_tanh  [label=V_sys];
+incl -> tilted_disk_model_tanh  [label=incl];
+h_rot;
+h_rot -> tilted_disk_model_tanh  [label=h_rot];
+"((v_obs_err_pow_2.0)_rdiv_1.0)" [shape=invtriangle];
+"((v_obs_err_pow_2.0)_rdiv_1.0)" -> V  [label=tau];
+"(v_obs_err_pow_2.0)" [shape=invtriangle];
+"(v_obs_err_pow_2.0)" -> "((v_obs_err_pow_2.0)_rdiv_1.0)"  [label=b];
+v_obs_err -> "(v_obs_err_pow_2.0)"  [label=a];
+V [style=filled];
+"((v_obs_err_pow_2.0)_rdiv_1.0)" [shape=invtriangle];
 }

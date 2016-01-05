@@ -276,6 +276,18 @@ def z_test(im, fiberflat, sdss, fiber=47, dz=0.):
     return sdss.spectrum/np.max(sdss.spectrum) * \
         np.percentile(sparsepak_spectrum, 98.)
 
+class bootstrap_sdss(object):
+    '''
+    Imitates the astroML sdss class with the bare minimum info
+        to run flux-calibration
+    '''
+    def __init__(self, cal):
+        self.cal = cal
+        self.spectrum = self.cal[1].data['flux']
+
+    def wavelength(self):
+        return 10.**self.cal[1].data['loglam']
+
 
 def sdss_cal(im, fiberflat, sdss, dz, z=0, verbose=False, fiber=47,
              blur=100, full_output=False):
@@ -1251,7 +1263,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
 
         if fit_plots == True:
 
-                # create a figure
+            # create a figure
             plt.close('all')
             fig = plt.figure(figsize=(8, 6))
 
@@ -1491,7 +1503,12 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         plate = objects[objname]['sdss_spec'][0]
         mjd = objects[objname]['sdss_spec'][1]
         sdss_fiber = objects[objname]['sdss_spec'][2]
-        sdss = fetch_sdss_spectrum(plate, mjd, sdss_fiber)
+        if objname != 'UGC04329':
+            sdss = fetch_sdss_spectrum(plate, mjd, sdss_fiber)
+            print sdss
+        else:
+            cal = fits.open('UGC04329/UGC04329_calib.fits')
+            sdss = bootstrap_sdss(cal)
 
         dz, ifu_corr, corr_poly = sdss_cal(
             im, fiberflat, sdss, dz=0., z=z, verbose=False,

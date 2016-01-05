@@ -152,6 +152,9 @@ def ppxf_population_gas_example_sdss():
     stars_templates, lamRange_temp, logLam_temp = \
         setup_spectral_library(velscale, FWHM_gal)
 
+    nL, nT, nZ = stars_templates.shape
+    print
+
     # The stellar templates are reshaped into a 2-dim array with each spectrum
     # as a column, however we save the original array dimensions, which are
     # needed to specify the regularization dimensions
@@ -180,6 +183,7 @@ def ppxf_population_gas_example_sdss():
     # COMPONENT value
     #
     templates = np.hstack([stars_templates, gas_templates])
+    print(templates.shape)
 
     #-----------------------------------------------------------
 
