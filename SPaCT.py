@@ -825,22 +825,20 @@ def gal_rad_dep_plot(objname, fibers, quantity=None, qty_dets='',
     fibers = fibers[np.isnan(fibers[quantity]) == False]
     fibers[quantity] += offset
 
-    if (quantity == 'V') or (quantity == 'sigma'):
+    if quantity in ['V', 'sigma', 'V_gas', 'sigma_gas']:
         plt.errorbar(fibers['r'], fibers[quantity],
                      yerr=fibers['d' + quantity], fmt='x', alpha=0.5)
         yllim = np.min(np.insert(np.array(fibers[quantity]), 0, -1000.))
         yulim = np.max(np.insert(np.array(fibers[quantity]), 0, 1000.))
         plt.ylim([0.8*yllim, 1.2*yulim])
-    elif (quantity == 'Z') or (quantity == 't'):
+    else :
         plt.scatter(fibers['r'], fibers[quantity],
                     marker='x', alpha=0.5)
-    else:
-        print 'ERROR: UNKNOWN QUANTITY... PLOT WILL BE BLANK'
 
     plt.xlim([-5., 50.])
 
     if fit == True:
-        if (quantity == 'V') or (quantity == 'sigma'):
+        if quantity in ['V', 'sigma', 'V_gas', 'sigma_gas']:
             dq = fibers['d' + quantity]
             dq[dq == 0.] = np.min(dq[dq != 0.])
         else:
@@ -947,7 +945,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
 
     import sys
     import ppxf_util as util
-    from ppxf import ppxf
+    from ppxf import ppxf, reddening_curve
     import glob as glob
     from scipy import ndimage
     from time import clock
@@ -1144,6 +1142,10 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
 
         lam = np.exp(logLam1)
 
+        #deredden in MW frame
+        fact = reddening_curve(lam_obs, reddening)
+        galaxy /= fact
+
         print 'ICs:', start
 
         # first pass: initial fit of parameters, no noise, no regul, no gas
@@ -1151,7 +1153,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         pp = ppxf(templates=templates, galaxy=galaxy/np.median(galaxy),
                   noise=galaxy*0.+1., velScale=velscale, start=start,
                   goodpixels=goodPixels, plot=False, moments=n_moments,
-                  vsyst=dv, reddening=reddening,
+                  vsyst=dv, reddening=0.,
                   lam=lam, quiet=True)
         # print 'First pass successful'
         print 'First pass results'
@@ -1166,7 +1168,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
                   noise=noise, velScale=velscale,
                   start=pp.sol[:2], goodpixels=goodPixels, clean=False,
                   moments=n_moments, vsyst=dv, quiet=True,
-                  reddening=reddening, lam=lam, bias=bias,
+                  reddening=pp.reddening, lam=lam, bias=bias,
                   oversample=oversample, regul=regul, reg_dim=reg_dim)
         print 'Second pass results'
         print '\t', pp.sol
@@ -1205,16 +1207,21 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             gas_templates = np.tile(gas_templates, (1, gas_comps))
             # print gas_templates.shape
             # print templates.shape
+            #print templates.shape
             all_templates = np.hstack([templates, gas_templates])
+            #print all_templates.shape
 
             # now modify the starting kinematics to permit multiple components
-            moments = [n_moments] + [-2] + [2] * (gas_comps - 1)
+            n_moments = [n_moments] + [2] * (gas_comps)
             start = [start] * (gas_comps + 1)
+            #print n_moments
+            #print start
         else:
             gas_comps = 0
             all_templates = templates
 
         # print all_templates.shape
+        all_templates /= np.median(all_templates)
 
         print 'gas components:', gas_comps
         print 'emission lines per gas component:', nGas_templates
@@ -1224,16 +1231,22 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         for gascomp_number in range(1, gas_comps + 1):
             component.extend([gascomp_number] * nGas_templates)
 
-        # print len(component)
+        #deredden in rest-frame
+        #this allows multiplicative polynomials to be used to
+        #correct fluxcal
+        reddening = pp.reddening
+        fact = reddening_curve(lam, pp.reddening)
+        galaxy /= fact
 
         pp = ppxf(templates=all_templates, galaxy=galaxy/np.median(galaxy),
                   noise=noise, velScale=velscale, start=start,
                   goodpixels=goodPixels, clean=clean, plot=False,
-                  moments=n_moments, vsyst=dv, reddening=reddening,
+                  moments=n_moments, vsyst=dv, reddening=None,
                   lam=lam, bias=bias, quiet=quiet, oversample=oversample,
-                  regul=regul, reg_dim=reg_dim, component=component)
+                  regul=regul, reg_dim=reg_dim, component=component,
+                  mdegree=10, degree=-1)
 
-        print z, lam[0], lam[-1]
+        #print z, lam[0], lam[-1]
 
         print 'Final pass results'
         if gas_comps > 0:
@@ -1254,7 +1267,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
                 w = np.where(np.array(component) == gas_comps)[0]
                 print 'Gas component', i
                 print '\t', pp.sol[i][:2]
-                print 'Emission lines peak intensity:'
+                print '\tEmission lines peak intensity:'
                 for name, weight, line in zip(
                         line_names, pp.weights[w], pp.matrix[:, w].T):
                     print('\t %12s: %.3g' % (name, weight*np.max(line)))
@@ -1279,7 +1292,19 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
                 (galaxy + noise)/np.median(galaxy), edgecolor='#ff5f00',
                 facecolor='coral', alpha=0.5)
             # best fit
-            ax1.plot(pp.lam, pp.bestfit, c='r', linewidth=2, label='pPXF fit')
+            #ax1.plot(pp.lam, pp.bestfit, c='r', linewidth=2, label='pPXF fit')
+
+            # stars
+            stars = pp.matrix[:, :nStar_templates].dot(
+                pp.weights[:nStar_templates])
+            ax1.plot(pp.lam, stars, c='r', linewidth=2, label='stars')
+
+            # gas
+            gas_weights = pp.weights[-nGas_templates:]
+            gas = pp.matrix[:, -nGas_templates:].dot(
+                pp.weights[-nGas_templates:])
+            ax1.plot(pp.lam, gas+0.15, c='b', linewidth=2, label='gas')
+
             # residuals
             mn = np.min(pp.bestfit[pp.goodpixels])
             mx = np.max(pp.bestfit[pp.goodpixels])
@@ -1307,7 +1332,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             ax1.spines['bottom'].set_visible(False)
             plt.setp(ax1.get_xticklabels(), visible=False)
             ax1.set_ylabel("Counts", fontsize=16)
-            ax1.legend(loc='best')
+            ax1.legend(loc='lower right', fontsize='small')
 
             # set up a twin axis to display pixel positions
             # DO NOT CHANGE XLIMS OF ANYTHING!!!!
@@ -1407,7 +1432,19 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
                 print 'writing to ' + objname + '/' + str(fiber) + '.png'
                 plt.savefig(objname + '/' + str(fiber) + '.png')
 
-    return pp, ssps
+    gas_fits = {
+        'reddening': reddening,
+        'V': pp.sol[1][0],
+        'sigma': pp.sol[1][1],
+        'dV': pp.error[1][0],
+        'dsigma': pp.error[1][1],
+        'Hdelta': gas_weights[0],
+        'Hgamma': gas_weights[1],
+        'Hbeta': gas_weights[2],
+        '[OIII]5007d': gas_weights[3],
+        '[OI]6300d': gas_weights[4]}
+
+    return pp, ssps, gas_fits
 
 
 def pPXF_make_derived_plots(objname, v_offset=None):
@@ -1430,6 +1467,26 @@ def pPXF_make_derived_plots(objname, v_offset=None):
     gal_im_fiber_plot(
         objname=objname, fibers=fiberdata,
         quantity='sigma', qty_dets='[km/s]', save=True)
+    '''gal_im_fiber_plot(
+        objname=objname, fibers=fiberdata, quantity='V_gas',
+        qty_dets='[km/s]', save=True, offset=v_offset, oe='odd')
+    gal_im_fiber_plot(
+        objname=objname, fibers=fiberdata, quantity='sigma_gas',
+        qty_dets='[km/s]', save=True)'''
+    gal_im_fiber_plot(
+        objname=objname, fibers=fiberdata, quantity='Hdelta', save=True)
+    gal_im_fiber_plot(
+        objname=objname, fibers=fiberdata, quantity='Hgamma', save=True)
+    gal_im_fiber_plot(
+        objname=objname, fibers=fiberdata, quantity='Hbeta', save=True)
+    gal_im_fiber_plot(
+        objname=objname, fibers=fiberdata, quantity='Hdelta', save=True)
+    gal_im_fiber_plot(
+        objname=objname, fibers=fiberdata,
+        quantity='[OIII]5007d', save=True)
+    gal_im_fiber_plot(
+        objname=objname, fibers=fiberdata,
+        quantity='[OI]6300d', save=True)
 
     gal_rad_dep_plot(
         objname=objname, fibers=fiberdata,
@@ -1443,9 +1500,30 @@ def pPXF_make_derived_plots(objname, v_offset=None):
     gal_rad_dep_plot(
         objname=objname, fibers=fiberdata,
         quantity='sigma', qty_dets='[km/s]', save=True, fit=True)
+    '''gal_rad_dep_plot(
+        objname=objname, fibers=fiberdata, quantity='V_gas',
+        qty_dets='[km/s]', save=True, offset=v_offset)
+    gal_rad_dep_plot(
+        objname=objname, fibers=fiberdata, quantity='sigma_gas',
+        qty_dets='[km/s]', save=True)'''
+    gal_rad_dep_plot(
+        objname=objname, fibers=fiberdata, quantity='Hdelta', save=True)
+    gal_rad_dep_plot(
+        objname=objname, fibers=fiberdata, quantity='Hgamma', save=True)
+    gal_rad_dep_plot(
+        objname=objname, fibers=fiberdata, quantity='Hbeta', save=True)
+    gal_rad_dep_plot(
+        objname=objname, fibers=fiberdata, quantity='Hdelta', save=True)
+    gal_rad_dep_plot(
+        objname=objname, fibers=fiberdata,
+        quantity='[OIII]5007d', save=True)
+    gal_rad_dep_plot(
+        objname=objname, fibers=fiberdata,
+        quantity='[OI]6300d', save=True)
 
 
-def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
+def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.,
+                    suppress = False):
     import ppxf
     from astroML.datasets import fetch_sdss_spectrum
     import warnings
@@ -1456,6 +1534,7 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
     import numpy as np
     import os
     from plotting_tools import rejection_sample_2d
+    import misc_tools as misc
 
     warnings.filterwarnings(
         'ignore', message="Polyfit may be poorly conditioned")
@@ -1515,6 +1594,7 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
             blur=75, full_output=True)
         write_corr_frame(ifu_corr, im, z, dz, objname, verbose=False)
 
+    # SSP fit data
     fiberdata.add_column(
         table.Column(name='Z', data=np.nan*np.ones(len(fiberdata['row']))))
     fiberdata.add_column(
@@ -1529,11 +1609,42 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         table.Column(
             name='dsigma', data=np.nan*np.ones(len(fiberdata['row']))))
 
+    # gas fit data
+    fiberdata.add_column(
+        table.Column(name='V_gas', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='dV_gas', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='sigma_gas', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='dsigma_gas', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='Hdelta', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='Hgamma', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='Hbeta', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='[OIII]5007d', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='[OI]6300d', data=np.nan*np.ones(len(fiberdata['row']))))
+    fiberdata.add_column(
+        table.Column(
+            name='reddening', data=np.nan*np.ones(len(fiberdata['row']))))
+
     for i, fiber_entry in enumerate(fiberdata[fiberdata['row'] != -9999]):
         # print fiber_entry
         fiber = fiber_entry['row']
         # if fiber != -9999:
-        print 'Running fiber', fiber
+        print 'Running', objname, 'fiber', fiber
 
         n_moments = 2
 
@@ -1546,7 +1657,9 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
         save_fits = True
 
         try:
-            pp, ssps = SP_pPXF(
+            if suppress == True: misc.blockPrint()
+
+            pp, ssps, gas_fits = SP_pPXF(
                 (ifu.T/np.median(ifu, axis=1)).T, fiber=fiber,
                 l_summ=(CRVAL1, CDELT1, NAXIS1), z=z + dz, verbose=False,
                 noise_plots=False, fit_plots=True, save_fits=save_fits,
@@ -1581,6 +1694,7 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
 
             # fiberdata['Z'] and ['t'] have 16th, 50th, and 84th percentiles
 
+            # SSP fits
             fiberdata['Z'][np.where(fiberdata['row'] == fiber)] = fiber_Z_avg
             fiberdata['t'][np.where(fiberdata['row'] == fiber)] = fiber_age_avg
 
@@ -1591,13 +1705,43 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.):
             fiberdata['dsigma'][
                 np.where(fiberdata['row'] == fiber)] = fiber_sigma_err
 
-            print 'Fiber', fiber, 'done!'
+            # gas emission fits
+            fiberdata['V_gas'][np.where(
+                fiberdata['row'] == fiber)] = gas_fits['V']
+            fiberdata['sigma_gas'][np.where(
+                fiberdata['row'] == fiber)] = gas_fits['sigma']
+            fiberdata['dV_gas'][np.where(
+                fiberdata['row'] == fiber)] = gas_fits['dV']
+            fiberdata['dsigma_gas'][np.where(
+                    fiberdata['row'] == fiber)] = gas_fits['dsigma']
+            fiberdata['Hdelta'][np.where(
+                    fiberdata['row'] == fiber)] = gas_fits['Hdelta']
+            fiberdata['Hgamma'][np.where(
+                    fiberdata['row'] == fiber)] = gas_fits['Hgamma']
+            fiberdata['Hbeta'][np.where(
+                    fiberdata['row'] == fiber)] = gas_fits['Hbeta']
+            fiberdata['[OIII]5007d'][np.where(
+                    fiberdata['row'] == fiber)] = gas_fits['[OIII]5007d']
+            fiberdata['[OI]6300d'][np.where(
+                    fiberdata['row'] == fiber)] = gas_fits['[OI]6300d']
+
+            # finally reddening
+            fiberdata['reddening'][np.where(
+                    fiberdata['row'] == fiber)] = gas_fits['reddening']
+
+            print '\tFiber', fiber, 'done!'
 
         except ZeroDivisionError:
             print 'No fit in fiber', fiber
 
         except TypeError:  # occasionally you get a bad mpfit
             print 'probably velScale/mpfit error in fiber', fiber
+
+        except IndexError:
+            print 'weird index error in fiber', fiber
+
+        finally:
+            misc.enablePrint()
 
         if first_few:
             if i >= (first_few - 1):

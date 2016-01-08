@@ -238,12 +238,14 @@ def emission_lines(logLam_temp, lamRange_gal, FWHM_gal):
     line_names = np.append(line_names, '[OIII]5007d') # single template for this doublet
     line_wave = np.append(line_wave, lines[1])
 
+
     #                  -----[OI]-----
     lines = np.array([6363.67, 6300.30])
     doublet = np.exp(-0.5*((lam - lines[1])/sigma)**2) + 0.33*np.exp(-0.5*((lam - lines[0])/sigma)**2)
     emission_lines = np.column_stack([emission_lines, doublet])
     line_names = np.append(line_names, '[OI]6300d') # single template for this doublet
     line_wave = np.append(line_wave, lines[1])
+
 
     #                 -----[NII]-----
     lines = np.array([6548.03, 6583.41])
