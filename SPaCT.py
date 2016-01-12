@@ -1189,7 +1189,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
 
         if np.abs(pp.sol[0]) >= 1900.:
             raise KinematicFitError('Unrealistic LOSVD offset velocity')
-        elif np.abs(pp.sol[1]) >= 1900.:
+        elif np.abs(pp.sol[1]) >= 900.:
             raise KinematicFitError('Unrealistic LOSVD velocity dispersion')
 
         # print np.mean(np.abs(pp.bestfit - galaxy/np.median(galaxy)))
