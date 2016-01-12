@@ -914,6 +914,11 @@ def pPXF_MC(pp, lam):
     bestfit = pp.bestfit
 
 
+class KinematicFitError(Exception):
+    def __init__(self, message):
+        self.message = message
+
+
 def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             noise_plots=False, fit_plots=False, reddening=None, age_lim=13.6,
             n_moments=2, bias=None, objname='', clean=True, quiet=False,
@@ -1182,6 +1187,11 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         print '\t', pp.sol
         print '\tChi2/DOF =', pp.chi2
 
+        if np.abs(pp.sol[0]) >= 1900.:
+            raise KinematicFitError('Unrealistic LOSVD offset velocity')
+        elif np.abs(pp.sol[1]) >= 1900.:
+            raise KinematicFitError('Unrealistic LOSVD velocity dispersion')
+
         # print np.mean(np.abs(pp.bestfit - galaxy/np.median(galaxy)))
 
         print 'rescaling by', pp.chi2
@@ -1391,7 +1401,7 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             ax1_pix.set_xlim([0, NAXIS1 - 1])
             ax1_pix.set_xlabel('Pixel')
 
-            ax1.set_ylim([mn1, mx] + np.array([-0.05, 0.05])*(mx-mn1))
+            ax1.set_ylim([-0.1, 1.1*np.max(pp.bestfit)])
 
             # set up an axis to display residuals vs noise
 
@@ -1586,6 +1596,7 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.,
     import os
     from plotting_tools import rejection_sample_2d
     import misc_tools as misc
+    from progressbar import ProgressBar, Percentage, Bar
 
     warnings.filterwarnings(
         'ignore', message="Polyfit may be poorly conditioned")
@@ -1691,6 +1702,11 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.,
         table.Column(
             name='reddening', data=np.nan*np.ones(len(fiberdata['row']))))
 
+    if suppress == True:
+        pbar = ProgressBar(
+            widgets=[Percentage(), Bar()],
+            maxval=int((fiberdata['row'] != -9999).sum())).start()
+
     for i, fiber_entry in enumerate(fiberdata[fiberdata['row'] != -9999]):
         # print fiber_entry
         fiber = fiber_entry['row']
@@ -1782,6 +1798,9 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.,
 
             print '\tFiber', fiber, 'done!'
 
+        except KinematicFitError as emsg:
+            print 'Fit failed:', emsg
+
         except ZeroDivisionError:
             print 'No fit in fiber', fiber
 
@@ -1793,7 +1812,9 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.,
             print 'weird index error in fiber', fiber
 
         finally:
-            misc.enablePrint()
+            if suppress == True:
+                misc.enablePrint()
+                pbar.update(i + 1)
 
         if first_few:
             if i >= (first_few - 1):
@@ -1804,6 +1825,7 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.,
             os.makedirs(objname)
         except OSError:
             pass
+        if suppress == True: pbar.finish()
         fiberdata.write(objname + '/fiberfits.dat', format='ascii')
         print 'Written to', objname + '/fiberfits.dat'
 
