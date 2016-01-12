@@ -916,7 +916,7 @@ def pPXF_MC(pp, lam):
 
 def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             noise_plots=False, fit_plots=False, reddening=None, age_lim=13.6,
-            n_moments=4, bias=None, objname='', clean=True, quiet=False,
+            n_moments=2, bias=None, objname='', clean=True, quiet=False,
             oversample=False, save_fits=False, gas_comps=None, regul=100.):
     '''
     Run Cappellari et al.'s pPXF on a SparsePak fiber
@@ -1143,8 +1143,9 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         lam = np.exp(logLam1)
 
         #deredden in MW frame
-        fact = reddening_curve(lam_obs, reddening)
-        galaxy /= fact
+        if reddening is not None:
+            fact = reddening_curve(lam_obs, reddening)
+            galaxy /= fact
 
         print 'ICs:', start
 
@@ -1163,6 +1164,13 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
 
         # new noise spectrum will be residual from 1st fit
         noise = np.abs(pp.bestfit - galaxy/np.median(galaxy))
+
+        #deredden in rest-frame
+        #this allows multiplicative polynomials to be used to
+        #correct fluxcal
+        reddening = pp.reddening
+        fact = reddening_curve(lam, pp.reddening)
+        galaxy /= fact
 
         pp = ppxf(templates=templates, galaxy=galaxy/np.median(galaxy),
                   noise=noise, velScale=velscale,
@@ -1216,6 +1224,13 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             start = [start] * (gas_comps + 1)
             #print n_moments
             #print start
+
+            #make a new mask that doesn't mask eline locations
+            goodPixels = util.determine_goodpixels(logLam1, lamRange2, vel,
+                                                   mask_elines = False)
+            goodPixels = np.array(
+                            [pixel for pixel in goodPixels if pixel
+                             not in negative_pixels])
         else:
             gas_comps = 0
             all_templates = templates
@@ -1231,20 +1246,13 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
         for gascomp_number in range(1, gas_comps + 1):
             component.extend([gascomp_number] * nGas_templates)
 
-        #deredden in rest-frame
-        #this allows multiplicative polynomials to be used to
-        #correct fluxcal
-        reddening = pp.reddening
-        fact = reddening_curve(lam, pp.reddening)
-        galaxy /= fact
-
         pp = ppxf(templates=all_templates, galaxy=galaxy/np.median(galaxy),
                   noise=noise, velScale=velscale, start=start,
-                  goodpixels=goodPixels, clean=clean, plot=False,
+                  goodpixels=goodPixels, clean=True, plot=False,
                   moments=n_moments, vsyst=dv, reddening=None,
                   lam=lam, bias=bias, quiet=quiet, oversample=oversample,
                   regul=regul, reg_dim=reg_dim, component=component,
-                  mdegree=10, degree=-1)
+                  mdegree=20, degree=-1)
 
         #print z, lam[0], lam[-1]
 
@@ -1303,7 +1311,47 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             gas_weights = pp.weights[-nGas_templates:]
             gas = pp.matrix[:, -nGas_templates:].dot(
                 pp.weights[-nGas_templates:])
-            ax1.plot(pp.lam, gas+0.15, c='b', linewidth=2, label='gas')
+            if gas_comps not in (0, None):
+                ax1.plot(pp.lam, gas, c='b', linewidth=2, label='gas')
+
+                line_ns = [r'H-$\beta$', r'H-$\gamma$', r'H-$\delta$',
+                           r'[OI]6300d', r'[OI]6300d',
+                           r'[OIII]5007d', r'[OIII]5007d']
+                line_ls = [4861.33, 4340.47, 4101.76, 6363.67, 6300.30,
+                           4958.92, 5006.84]
+
+                for i, (l, n) in enumerate(zip(line_ls, line_ns)):
+                    if i == 0:
+                        h = -300
+                        v = 0.4
+                    elif i == 1:
+                        h = 200
+                        v = -0.2
+                    elif i == 2:
+                        h = -200
+                        v = 0.4
+                    elif i == 3:
+                        h = -400
+                        v = 0.4
+                    elif i == 4:
+                        h = -400
+                        v = 0.2
+                    elif i == 5:
+                        h = 200
+                        v = 0.4
+                    elif i == 6:
+                        h = 200
+                        v = 0.2
+                    ax1.axvline(l*(1+pp.sol[1][0]/c),
+                                ymin=0., ymax=2., color='k',
+                                linestyle='--')
+                    ax1.annotate(s=n, xy=(l*(1+pp.sol[1][0]/c), 0.5),
+                                 xytext=(l*(1+pp.sol[1][0]/c) + h,
+                                         0.4 + v),
+                                 arrowprops={'shrink' : 0.05,
+                                             'edgecolor': 'None',
+                                             'facecolor': 'k',
+                                             'frac': 0.35})
 
             # residuals
             mn = np.min(pp.bestfit[pp.goodpixels])
@@ -1332,7 +1380,8 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
             ax1.spines['bottom'].set_visible(False)
             plt.setp(ax1.get_xticklabels(), visible=False)
             ax1.set_ylabel("Counts", fontsize=16)
-            ax1.legend(loc='lower right', fontsize='small')
+            ax1.legend(bbox_to_anchor=(1.1, .25), fontsize='small',
+                       loc='lower right', prop={'size': 8})
 
             # set up a twin axis to display pixel positions
             # DO NOT CHANGE XLIMS OF ANYTHING!!!!
@@ -1357,7 +1406,8 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
                          label='resid', alpha=0.5)
             ax1_res.set_xlabel(r'$\lambda_r ~ [\AA]$')
 
-            ax1_res.legend(loc='best', prop={'size': 8})
+            ax1_res.legend(loc='lower right', prop={'size': 8},
+                           bbox_to_anchor=(1.1, .25))
             ax1_res.set_ylabel(r'$\Delta_{rel}$')
             ax1_res.set_yscale('log')
             ax1_res.set_ylim([10**-2.5, 1.])
@@ -1389,10 +1439,8 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
                 weights, origin='lower', interpolation='nearest',
                 cmap='cubehelix_r',
                 vmin=0.0, extent=(
-                    np.log10(np.min(ssps['t'])) - d_log_ages/2.,
-                    np.log10(np.max(ssps['t'])) + d_log_ages/2.,
-                    np.min(ssps['Z']) - dz/2.,
-                    np.max(ssps['Z']) + dz/2.))
+                    np.log10(ssps['t']).min(), np.log10(ssps['t']).max(),
+                    ssps['Z'].min(), ssps['Z'].max()))
 
             plt.colorbar()
             plt.title("Mass Fraction", size=16)
@@ -1432,17 +1480,20 @@ def SP_pPXF(ifu, fiber, l_summ, z, template_set='MILES', verbose=False,
                 print 'writing to ' + objname + '/' + str(fiber) + '.png'
                 plt.savefig(objname + '/' + str(fiber) + '.png')
 
-    gas_fits = {
-        'reddening': reddening,
-        'V': pp.sol[1][0],
-        'sigma': pp.sol[1][1],
-        'dV': pp.error[1][0],
-        'dsigma': pp.error[1][1],
-        'Hdelta': gas_weights[0],
-        'Hgamma': gas_weights[1],
-        'Hbeta': gas_weights[2],
-        '[OIII]5007d': gas_weights[3],
-        '[OI]6300d': gas_weights[4]}
+    if gas_comps not in (0, None):
+        gas_fits = {
+            'reddening': reddening,
+            'V': pp.sol[1][0],
+            'sigma': pp.sol[1][1],
+            'dV': pp.error[1][0],
+            'dsigma': pp.error[1][1],
+            'Hdelta': gas_weights[0],
+            'Hgamma': gas_weights[1],
+            'Hbeta': gas_weights[2],
+            '[OIII]5007d': gas_weights[3],
+            '[OI]6300d': gas_weights[4]}
+    else:
+        gas_fits = {}
 
     return pp, ssps, gas_fits
 
@@ -1734,8 +1785,9 @@ def pPXF_run_galaxy(objname, first_few=None, gas_comps=None, regul=100.,
         except ZeroDivisionError:
             print 'No fit in fiber', fiber
 
-        except TypeError:  # occasionally you get a bad mpfit
+        except TypeError as emsg:  # occasionally you get a bad mpfit
             print 'probably velScale/mpfit error in fiber', fiber
+            print 'Error message:\n', emsg
 
         except IndexError:
             print 'weird index error in fiber', fiber

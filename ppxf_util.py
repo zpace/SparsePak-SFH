@@ -166,7 +166,7 @@ def log_rebin(lamRange, spec, oversample=False, velscale=None, flux=False):
 # V2.0.0: Translated from IDL into Python. MC, Oxford, 10 December 2013
 # V2.0.1: Updated line list. MC, Oxford, 8 January 2014
 
-def determine_goodpixels(logLam, lamRangeTemp, vel):
+def determine_goodpixels(logLam, lamRangeTemp, vel, mask_elines = True):
     """
     Generates a list of goodpixels to mask a given set of gas emission
     lines. This is meant to be used as input for PPXF.
@@ -177,13 +177,14 @@ def determine_goodpixels(logLam, lamRangeTemp, vel):
     #sky lines              NaI     OI    HgI    Atm
     #lines = lines.append([5683.88, 5577., 5461., 5199.])
 
-    dv = lines*0 + 800 # width/2 of masked gas emission region in km/s
+    dv = lines*0 + 1200 # width/2 of masked gas emission region in km/s
     c = 299792.458 # speed of light in km/s
 
     flag = logLam < 0 # empty mask
-    for j in range(lines.size):
-        flag |= (logLam > np.log(lines[j]) + (vel - dv[j])/c) \
-              & (logLam < np.log(lines[j]) + (vel + dv[j])/c)
+    if mask_elines == True:
+        for j in range(lines.size):
+            flag |= (logLam > np.log(lines[j]) + (vel - dv[j])/c) \
+                  & (logLam < np.log(lines[j]) + (vel + dv[j])/c)
 
     flag |= logLam < np.log(lamRangeTemp[0]) + (vel + 900.)/c # Mask edges of
     flag |= logLam > np.log(lamRangeTemp[1]) + (vel - 900.)/c # stellar library
